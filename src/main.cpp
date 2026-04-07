@@ -1,12 +1,12 @@
 #include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/System.hpp>
+#include "Player.h"
 
 int main()
 {
-    sf::RenderWindow window(sf::VideoMode(800, 600), "Transform Game");
+    sf::RenderWindow window(sf::VideoMode(800, 600), "Transform Arena");
     window.setFramerateLimit(60);
 
+    Player player(400.f, 300.f);
     sf::Clock clock;
 
     while (window.isOpen())
@@ -20,12 +20,12 @@ int main()
                 window.close();
         }
 
-        float deltaTime = clock.restart().asSeconds();
+        float dt = clock.restart().asSeconds();
+        player.handleInput(dt);
+        player.update(dt);
 
-        window.clear(sf::Color(30, 30, 40));
-
-        // TODO: game logic and rendering goes here
-
+        window.clear(sf::Color(18, 18, 28));
+        player.draw(window);
         window.display();
     }
 
