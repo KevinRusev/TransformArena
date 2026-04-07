@@ -1,12 +1,12 @@
 #include <SFML/Graphics.hpp>
-#include "Player.h"
+#include "Game.h"
 
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(800, 600), "Transform Arena");
     window.setFramerateLimit(60);
 
-    Player player(400.f, 300.f);
+    Game game(window);
     sf::Clock clock;
 
     while (window.isOpen())
@@ -18,14 +18,14 @@ int main()
                 window.close();
             if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape)
                 window.close();
+
+            game.handleEvent(event);
         }
 
         float dt = clock.restart().asSeconds();
-        player.handleInput(dt);
-        player.update(dt);
 
-        window.clear(sf::Color(18, 18, 28));
-        player.draw(window);
+        game.update(dt);
+        game.draw();
         window.display();
     }
 
