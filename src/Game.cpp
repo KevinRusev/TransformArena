@@ -72,7 +72,7 @@ void Game::update(float dt)
     }
 
     for (auto& enemy : enemies)
-        enemy.update(dt, player.getPosition());
+        enemy.update(dt, player.getPosition(), projectiles);
 
     for (auto& proj : projectiles)
         proj.update(dt);
@@ -120,7 +120,31 @@ void Game::spawnWave()
     for (int i = 0; i < count; i++)
     {
         sf::Vector2f pos = randomEdgePos();
-        enemies.emplace_back(pos.x, pos.y);
+        EnemyType type;
+        int roll = std::rand() % 100;
+
+        if (wave <= 2)
+        {
+            type = EnemyType::Chaser;
+        }
+        else if (wave <= 4)
+        {
+            type = (roll < 60) ? EnemyType::Chaser : EnemyType::Shooter;
+        }
+        else if (wave <= 6)
+        {
+            if (roll < 40) type = EnemyType::Chaser;
+            else if (roll < 70) type = EnemyType::Shooter;
+            else type = EnemyType::Brute;
+        }
+        else
+        {
+            if (roll < 35) type = EnemyType::Chaser;
+            else if (roll < 60) type = EnemyType::Shooter;
+            else type = EnemyType::Brute;
+        }
+
+        enemies.emplace_back(pos.x, pos.y, type);
     }
 }
 
@@ -129,7 +153,6 @@ void Game::checkCollisions()
     sf::Vector2f pp = player.getPosition();
     float pr = player.getRadius();
 
-    // dash damage
     if (player.isDashing())
     {
         for (auto& enemy : enemies)
@@ -140,7 +163,6 @@ void Game::checkCollisions()
         }
     }
 
-    // ground pound damage
     if (player.isGroundPounding())
     {
         for (auto& enemy : enemies)
@@ -151,7 +173,6 @@ void Game::checkCollisions()
         }
     }
 
-    // projectile vs enemy
     for (auto& proj : projectiles)
     {
         if (!proj.fromPlayer || !proj.isAlive()) continue;
@@ -167,7 +188,17 @@ void Game::checkCollisions()
         }
     }
 
-    // enemy contact
+    // enemy projectiles hit player
+    for (auto& proj : projectiles)
+    {
+        if (proj.fromPlayer || !proj.isAlive()) continue;
+        if (dist(proj.position, pp) < proj.radius + pr)
+        {
+            player.takeDamage((int)proj.damage);
+            proj.lifetime = 0.f;
+        }
+    }
+
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive()) continue;
