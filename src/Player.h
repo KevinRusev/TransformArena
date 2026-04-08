@@ -13,18 +13,27 @@ public:
     void draw(sf::RenderWindow& window);
 
     void transform(Form newForm);
+    void useAbility();
 
     sf::Vector2f getPosition() const;
+    sf::Vector2f getFacing() const;
     float getRadius() const;
     Form getForm() const;
     int getHealth() const;
     int getMaxHealth() const;
     bool isAlive() const;
-    bool justTransformed() const;
+    bool isDashing() const;
+    bool isInvincible() const;
+    bool isGroundPounding() const;
+    float getGroundPoundRadius() const;
+    float getGroundPoundDamage() const;
+    float getDashDamage() const;
+    bool wantsToShoot();
 
     void takeDamage(int amount);
     void heal(int amount);
     void reset(float x, float y);
+    bool justTransformed() const;
 
 private:
     sf::Vector2f position;
@@ -36,6 +45,28 @@ private:
     float size;
     int health;
     int maxHealth;
+
+    // circle dash
+    bool dashing;
+    float dashTimer;
+    float dashSpeed;
+    float dashDamage;
+    float dashDuration;
+
+    // triangle shoot
+    bool shootRequest;
+    float shootCooldown;
+    float shootTimer;
+
+    // square ground pound
+    bool groundPounding;
+    float poundTimer;
+    float poundDuration;
+    float poundRadius;
+    float poundDamage;
+
+    float abilityCooldown;
+    float cooldownTimer;
 
     float transformFlash;
     float invincibleTimer;

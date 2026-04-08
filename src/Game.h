@@ -3,6 +3,7 @@
 #include <vector>
 #include "Player.h"
 #include "Enemy.h"
+#include "Projectile.h"
 
 class Game
 {
@@ -17,6 +18,7 @@ private:
     sf::RenderWindow& window;
     Player player;
     std::vector<Enemy> enemies;
+    std::vector<Projectile> projectiles;
 
     int score;
     int wave;

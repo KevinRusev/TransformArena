@@ -40,6 +40,8 @@ void Game::handleEvent(const sf::Event& event)
         player.transform(Form::Triangle);
     else if (event.key.code == sf::Keyboard::Num3)
         player.transform(Form::Square);
+    else if (event.key.code == sf::Keyboard::Space)
+        player.useAbility();
 }
 
 void Game::update(float dt)
@@ -49,6 +51,15 @@ void Game::update(float dt)
 
     player.handleInput(dt);
     player.update(dt);
+
+    if (player.wantsToShoot())
+    {
+        sf::Vector2f pos = player.getPosition();
+        sf::Vector2f dir = player.getFacing();
+        float bulletSpeed = 500.f;
+        sf::Vector2f vel(dir.x * bulletSpeed, dir.y * bulletSpeed);
+        projectiles.emplace_back(pos, vel, 4.f, 20.f, true, sf::Color(255, 200, 60));
+    }
 
     if (enemies.empty())
     {
@@ -63,6 +74,9 @@ void Game::update(float dt)
     for (auto& enemy : enemies)
         enemy.update(dt, player.getPosition());
 
+    for (auto& proj : projectiles)
+        proj.update(dt);
+
     checkCollisions();
 
     for (auto& enemy : enemies)
@@ -75,6 +89,10 @@ void Game::update(float dt)
         std::remove_if(enemies.begin(), enemies.end(), [](const Enemy& e) { return !e.isAlive(); }),
         enemies.end());
 
+    projectiles.erase(
+        std::remove_if(projectiles.begin(), projectiles.end(), [](const Projectile& p) { return !p.isAlive(); }),
+        projectiles.end());
+
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
 }
@@ -85,6 +103,9 @@ void Game::draw()
 
     for (auto& enemy : enemies)
         enemy.draw(window);
+
+    for (auto& proj : projectiles)
+        proj.draw(window);
 
     player.draw(window);
 
@@ -108,6 +129,45 @@ void Game::checkCollisions()
     sf::Vector2f pp = player.getPosition();
     float pr = player.getRadius();
 
+    // dash damage
+    if (player.isDashing())
+    {
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() + 10.f)
+                enemy.takeDamage(player.getDashDamage());
+        }
+    }
+
+    // ground pound damage
+    if (player.isGroundPounding())
+    {
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            if (dist(pp, enemy.getPosition()) < player.getGroundPoundRadius() + enemy.getRadius())
+                enemy.takeDamage(player.getGroundPoundDamage());
+        }
+    }
+
+    // projectile vs enemy
+    for (auto& proj : projectiles)
+    {
+        if (!proj.fromPlayer || !proj.isAlive()) continue;
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            if (dist(proj.position, enemy.getPosition()) < proj.radius + enemy.getRadius())
+            {
+                enemy.takeDamage(proj.damage);
+                proj.lifetime = 0.f;
+                break;
+            }
+        }
+    }
+
+    // enemy contact
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive()) continue;
@@ -161,19 +221,23 @@ void Game::drawHUD()
     window.draw(waveTxt);
 
     std::string formName;
+    std::string abilityDesc;
     sf::Color formColor;
     switch (player.getForm())
     {
     case Form::Circle:
         formName = "[1] CIRCLE";
+        abilityDesc = "Space: Dash";
         formColor = sf::Color(80, 180, 255);
         break;
     case Form::Triangle:
         formName = "[2] TRIANGLE";
+        abilityDesc = "Space: Shoot";
         formColor = sf::Color(255, 160, 40);
         break;
     case Form::Square:
         formName = "[3] SQUARE";
+        abilityDesc = "Space: Slam";
         formColor = sf::Color(80, 210, 80);
         break;
     }
@@ -185,6 +249,14 @@ void Game::drawHUD()
     formTxt.setString(formName);
     formTxt.setPosition(660.f, 15.f);
     window.draw(formTxt);
+
+    sf::Text abilTxt;
+    abilTxt.setFont(font);
+    abilTxt.setCharacterSize(13);
+    abilTxt.setFillColor(sf::Color(180, 180, 180));
+    abilTxt.setString(abilityDesc);
+    abilTxt.setPosition(660.f, 36.f);
+    window.draw(abilTxt);
 
     if (!player.isAlive())
     {
@@ -211,8 +283,8 @@ void Game::drawHUD()
     hint.setFont(font);
     hint.setCharacterSize(12);
     hint.setFillColor(sf::Color(80, 80, 100));
-    hint.setString("WASD: Move  |  1/2/3: Transform  |  ESC: Quit");
-    hint.setPosition(200.f, 580.f);
+    hint.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  ESC: Quit");
+    hint.setPosition(160.f, 580.f);
     window.draw(hint);
 }
 
@@ -220,6 +292,7 @@ void Game::restart()
 {
     player.reset(400.f, 300.f);
     enemies.clear();
+    projectiles.clear();
     score = 0;
     wave = 0;
     waveTimer = 1.5f;
