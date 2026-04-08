@@ -27,8 +27,19 @@ void Game::handleEvent(const sf::Event& event)
     if (event.type != sf::Event::KeyPressed)
         return;
 
-    if (event.key.code == sf::Keyboard::R && !player.isAlive())
-        restart();
+    if (!player.isAlive())
+    {
+        if (event.key.code == sf::Keyboard::R)
+            restart();
+        return;
+    }
+
+    if (event.key.code == sf::Keyboard::Num1)
+        player.transform(Form::Circle);
+    else if (event.key.code == sf::Keyboard::Num2)
+        player.transform(Form::Triangle);
+    else if (event.key.code == sf::Keyboard::Num3)
+        player.transform(Form::Square);
 }
 
 void Game::update(float dt)
@@ -53,6 +64,12 @@ void Game::update(float dt)
         enemy.update(dt, player.getPosition());
 
     checkCollisions();
+
+    for (auto& enemy : enemies)
+    {
+        if (!enemy.isAlive())
+            score += 10;
+    }
 
     enemies.erase(
         std::remove_if(enemies.begin(), enemies.end(), [](const Enemy& e) { return !e.isAlive(); }),
@@ -143,6 +160,32 @@ void Game::drawHUD()
     waveTxt.setPosition(15.f, 58.f);
     window.draw(waveTxt);
 
+    std::string formName;
+    sf::Color formColor;
+    switch (player.getForm())
+    {
+    case Form::Circle:
+        formName = "[1] CIRCLE";
+        formColor = sf::Color(80, 180, 255);
+        break;
+    case Form::Triangle:
+        formName = "[2] TRIANGLE";
+        formColor = sf::Color(255, 160, 40);
+        break;
+    case Form::Square:
+        formName = "[3] SQUARE";
+        formColor = sf::Color(80, 210, 80);
+        break;
+    }
+
+    sf::Text formTxt;
+    formTxt.setFont(font);
+    formTxt.setCharacterSize(17);
+    formTxt.setFillColor(formColor);
+    formTxt.setString(formName);
+    formTxt.setPosition(660.f, 15.f);
+    window.draw(formTxt);
+
     if (!player.isAlive())
     {
         sf::Text goText;
@@ -168,8 +211,8 @@ void Game::drawHUD()
     hint.setFont(font);
     hint.setCharacterSize(12);
     hint.setFillColor(sf::Color(80, 80, 100));
-    hint.setString("WASD: Move  |  ESC: Quit");
-    hint.setPosition(280.f, 580.f);
+    hint.setString("WASD: Move  |  1/2/3: Transform  |  ESC: Quit");
+    hint.setPosition(200.f, 580.f);
     window.draw(hint);
 }
 
