@@ -43,9 +43,10 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss)
     {
         health *= 5.f;
         maxHealth = health;
-        size *= 2.2f;
-        speed *= 0.7f;
+        size *= 2.f;
+        speed *= 1.2f;
         contactDamage *= 2;
+        shootInterval = 1.8f;
     }
 
     shootTimer = (float)(std::rand() % 100) / 100.f * shootInterval;
@@ -76,12 +77,27 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
 
     case EnemyType::Brute:
     {
-        // slow chase with charge when close
-        if (dist < 150.f)
-            currentSpeed = speed * 2.f;
-        float wobble = std::sin(position.x * 0.03f + position.y * 0.03f) * 0.2f;
-        position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
-        position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+        if (bossFlag)
+        {
+            // boss brute: aggressive chase, charge when close
+            if (dist < 200.f)
+                currentSpeed = speed * 2.5f;
+            else
+                currentSpeed = speed * 1.2f;
+
+            // strafe slightly to be less predictable
+            float wobble = std::sin(position.x * 0.02f + position.y * 0.02f) * 0.3f;
+            position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
+            position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+        }
+        else
+        {
+            if (dist < 150.f)
+                currentSpeed = speed * 2.f;
+            float wobble = std::sin(position.x * 0.03f + position.y * 0.03f) * 0.2f;
+            position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
+            position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+        }
         break;
     }
 
@@ -124,6 +140,42 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
         }
         break;
     }
+    }
+
+    // boss shooting: spread of projectiles on a timer
+    if (bossFlag)
+    {
+        shootTimer -= dt;
+        if (shootTimer <= 0.f && dist < 500.f)
+        {
+            shootTimer = shootInterval;
+            float bulletSpeed = 180.f;
+            int numBullets = 5 + (int)(maxHealth / 200.f);
+            float hpPct = health / maxHealth;
+
+            if (hpPct < 0.4f)
+            {
+                // rage mode: ring of bullets
+                for (int i = 0; i < 12; i++)
+                {
+                    float angle = (float)i / 12.f * 6.2832f;
+                    sf::Vector2f bv(std::cos(angle) * bulletSpeed, std::sin(angle) * bulletSpeed);
+                    projectiles.emplace_back(position, bv, 5.f, 15.f, false, sf::Color(255, 60, 60));
+                }
+            }
+            else
+            {
+                // spread shot toward player
+                float baseAngle = std::atan2(dir.y, dir.x);
+                float spread = 0.6f;
+                for (int i = 0; i < numBullets; i++)
+                {
+                    float a = baseAngle - spread / 2.f + spread * ((float)i / (numBullets - 1));
+                    sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                    projectiles.emplace_back(position, bv, 5.f, 12.f, false, sf::Color(255, 80, 80));
+                }
+            }
+        }
     }
 
     // apply and decay knockback

@@ -88,13 +88,28 @@ void Room::spawnEnemies()
 
     if (roomType == RoomType::Boss)
     {
-        enemies.emplace_back(400.f, 200.f, EnemyType::Brute, true);
-        int minions = 2 + floorNum;
+        // different boss types per floor
+        EnemyType bossType = EnemyType::Brute;
+        if (floorNum == 2) bossType = EnemyType::Shooter;
+        if (floorNum >= 3) bossType = EnemyType::Brute;
+
+        enemies.emplace_back(400.f, 200.f, bossType, true);
+
+        int minions = 3 + floorNum * 2;
         for (int i = 0; i < minions; i++)
         {
-            float ex = 150.f + (float)(std::rand() % 500);
-            float ey = 100.f + (float)(std::rand() % 300);
-            EnemyType mt = (std::rand() % 2 == 0) ? EnemyType::Shooter : EnemyType::Chaser;
+            float ex = 100.f + (float)(std::rand() % 600);
+            float ey = 80.f + (float)(std::rand() % 400);
+            // avoid spawning on top of boss
+            float ddx = ex - 400.f, ddy = ey - 200.f;
+            if (std::sqrt(ddx * ddx + ddy * ddy) < 80.f)
+                ex += 150.f;
+
+            EnemyType mt;
+            int roll = std::rand() % 3;
+            if (roll == 0) mt = EnemyType::Shooter;
+            else if (roll == 1) mt = EnemyType::Chaser;
+            else mt = EnemyType::Brute;
             enemies.emplace_back(ex, ey, mt);
         }
         return;
