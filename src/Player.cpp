@@ -11,6 +11,7 @@ Player::Player(float startX, float startY)
     , shootRequest(false)
     , shootTimer(0.f)
     , groundPounding(false)
+    , poundDamageReady(false)
     , poundTimer(0.f)
     , cooldownTimer(0.f)
     , transformFlash(0.f)
@@ -47,7 +48,7 @@ void Player::applyFormStats()
         size = 24.f;
         maxHealth = 160;
         poundRadius = 100.f;
-        poundDamage = 60.f;
+        poundDamage = 35.f;
         poundDuration = 0.35f;
         abilityCooldown = 1.0f;
         break;
@@ -278,6 +279,7 @@ void Player::useAbility()
         if (!groundPounding)
         {
             groundPounding = true;
+            poundDamageReady = true;
             poundTimer = poundDuration;
             cooldownTimer = abilityCooldown;
         }
@@ -295,6 +297,17 @@ bool Player::wantsToShoot()
     return false;
 }
 
+void Player::aimAt(sf::Vector2f target)
+{
+    sf::Vector2f dir = target - position;
+    float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+    if (len > 1.f)
+    {
+        facing.x = dir.x / len;
+        facing.y = dir.y / len;
+    }
+}
+
 sf::Vector2f Player::getPosition() const { return position; }
 sf::Vector2f Player::getFacing() const { return facing; }
 float Player::getRadius() const { return size; }
@@ -305,6 +318,15 @@ bool Player::isAlive() const { return health > 0; }
 bool Player::isDashing() const { return dashing; }
 bool Player::isInvincible() const { return invincibleTimer > 0.f; }
 bool Player::isGroundPounding() const { return groundPounding; }
+bool Player::consumePoundDamage()
+{
+    if (poundDamageReady)
+    {
+        poundDamageReady = false;
+        return true;
+    }
+    return false;
+}
 float Player::getGroundPoundRadius() const { return poundRadius; }
 float Player::getGroundPoundDamage() const { return poundDamage; }
 float Player::getDashDamage() const { return dashDamage; }
@@ -341,6 +363,7 @@ void Player::reset(float x, float y)
     shootRequest = false;
     shootTimer = 0.f;
     groundPounding = false;
+    poundDamageReady = false;
     poundTimer = 0.f;
     cooldownTimer = 0.f;
     transformFlash = 0.f;

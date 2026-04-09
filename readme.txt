@@ -10,8 +10,9 @@ How to play:
 Controls:
   WASD / Arrow keys  -  Move
   1                  -  Transform to Circle (fast, agile)
-  2                  -  Transform to Triangle (balanced, strong attack)
+  2                  -  Transform to Triangle (ranged, mouse aim)
   3                  -  Transform to Square (slow, tanky, area damage)
+  Mouse              -  Aim (Triangle form)
   Space              -  Attack
   R                  -  Restart (after game over)
   ESC                -  Quit

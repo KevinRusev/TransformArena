@@ -5,8 +5,10 @@
 Enemy::Enemy(float x, float y, EnemyType type)
     : position(x, y)
     , velocity(0.f, 0.f)
+    , knockbackVel(0.f, 0.f)
     , type(type)
     , hitFlash(0.f)
+    , dashHitCooldown(0.f)
     , shootTimer(0.f)
     , shootInterval(1.5f)
     , preferredRange(250.f)
@@ -114,8 +116,18 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
     }
     }
 
+    // apply and decay knockback
+    position.x += knockbackVel.x * dt;
+    position.y += knockbackVel.y * dt;
+    knockbackVel.x *= 0.9f;
+    knockbackVel.y *= 0.9f;
+    if (std::abs(knockbackVel.x) < 1.f) knockbackVel.x = 0.f;
+    if (std::abs(knockbackVel.y) < 1.f) knockbackVel.y = 0.f;
+
     if (hitFlash > 0.f)
         hitFlash -= dt;
+    if (dashHitCooldown > 0.f)
+        dashHitCooldown -= dt;
 }
 
 void Enemy::draw(sf::RenderWindow& window)
@@ -216,6 +228,32 @@ void Enemy::takeDamage(float amount)
     health -= amount;
     hitFlash = 0.1f;
 }
+
+void Enemy::pushAway(sf::Vector2f from, float force)
+{
+    sf::Vector2f dir = position - from;
+    float d = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+    if (d > 0.1f)
+    {
+        dir.x /= d;
+        dir.y /= d;
+        if (force < 20.f)
+        {
+            // small nudge for separation - apply directly
+            position.x += dir.x * force;
+            position.y += dir.y * force;
+        }
+        else
+        {
+            // big hit like ground pound - smooth slide via velocity
+            knockbackVel.x += dir.x * force * 8.f;
+            knockbackVel.y += dir.y * force * 8.f;
+        }
+    }
+}
+
+bool Enemy::canBeDashHit() const { return dashHitCooldown <= 0.f; }
+void Enemy::markDashHit() { dashHitCooldown = 0.3f; }
 
 sf::Vector2f Enemy::getPosition() const { return position; }
 float Enemy::getRadius() const { return size; }

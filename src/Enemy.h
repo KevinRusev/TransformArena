@@ -20,10 +20,14 @@ public:
     EnemyType getType() const;
 
     void takeDamage(float amount);
+    void pushAway(sf::Vector2f from, float force);
+    bool canBeDashHit() const;
+    void markDashHit();
 
 private:
     sf::Vector2f position;
     sf::Vector2f velocity;
+    sf::Vector2f knockbackVel;
     EnemyType type;
 
     float speed;
@@ -33,6 +37,7 @@ private:
     int contactDamage;
 
     float hitFlash;
+    float dashHitCooldown;
     float shootTimer;
     float shootInterval;
     float preferredRange;

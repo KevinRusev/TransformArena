@@ -15,6 +15,8 @@ public:
     void transform(Form newForm);
     void useAbility();
 
+    void aimAt(sf::Vector2f target);
+
     sf::Vector2f getPosition() const;
     sf::Vector2f getFacing() const;
     float getRadius() const;
@@ -25,6 +27,7 @@ public:
     bool isDashing() const;
     bool isInvincible() const;
     bool isGroundPounding() const;
+    bool consumePoundDamage();
     float getGroundPoundRadius() const;
     float getGroundPoundDamage() const;
     float getDashDamage() const;
@@ -60,6 +63,7 @@ private:
 
     // square ground pound
     bool groundPounding;
+    bool poundDamageReady;
     float poundTimer;
     float poundDuration;
     float poundRadius;

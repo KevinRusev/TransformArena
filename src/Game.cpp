@@ -100,9 +100,17 @@ void Game::update(float dt)
         return;
 
     player.handleInput(dt);
+
+    // triangle form aims toward mouse cursor
+    if (player.getForm() == Form::Triangle)
+    {
+        sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
+        sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel);
+        player.aimAt(mouseWorld);
+    }
+
     player.update(dt);
 
-    // triangle shooting: spawn projectile when player requests
     if (player.wantsToShoot())
     {
         sf::Vector2f pos = player.getPosition();
@@ -126,9 +134,25 @@ void Game::update(float dt)
     if (waveAnnounceTimer > 0.f)
         waveAnnounceTimer -= dt;
 
-    // update enemies (they may spawn projectiles)
     for (auto& enemy : enemies)
         enemy.update(dt, player.getPosition(), projectiles);
+
+    // push enemies apart so they don't stack on top of each other
+    for (size_t i = 0; i < enemies.size(); i++)
+    {
+        for (size_t j = i + 1; j < enemies.size(); j++)
+        {
+            if (!enemies[i].isAlive() || !enemies[j].isAlive()) continue;
+            float minDist = enemies[i].getRadius() + enemies[j].getRadius();
+            float d = dist(enemies[i].getPosition(), enemies[j].getPosition());
+            if (d < minDist && d > 0.1f)
+            {
+                float push = (minDist - d) * 0.5f;
+                enemies[i].pushAway(enemies[j].getPosition(), push);
+                enemies[j].pushAway(enemies[i].getPosition(), push);
+            }
+        }
+    }
 
     // update projectiles
     for (auto& proj : projectiles)
@@ -289,27 +313,30 @@ void Game::checkCollisions()
     {
         for (auto& enemy : enemies)
         {
-            if (!enemy.isAlive()) continue;
+            if (!enemy.isAlive() || !enemy.canBeDashHit()) continue;
             if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() + 10.f)
             {
                 enemy.takeDamage(player.getDashDamage());
+                enemy.markDashHit();
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 6, 120.f, 3.f);
             }
         }
     }
 
-    // ground pound damages nearby enemies
-    if (player.isGroundPounding())
+    if (player.isGroundPounding() && player.consumePoundDamage())
     {
         for (auto& enemy : enemies)
         {
             if (!enemy.isAlive()) continue;
-            if (dist(pp, enemy.getPosition()) < player.getGroundPoundRadius() + enemy.getRadius())
+            float d = dist(pp, enemy.getPosition());
+            if (d < player.getGroundPoundRadius() + enemy.getRadius())
             {
                 enemy.takeDamage(player.getGroundPoundDamage());
-                addScreenShake(6.f, 0.2f);
+                float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
+                enemy.pushAway(pp, knockback);
             }
         }
+        addScreenShake(6.f, 0.2f);
     }
 
     // player projectiles hit enemies
@@ -519,8 +546,8 @@ void Game::drawHUD()
     hint.setFont(font);
     hint.setCharacterSize(12);
     hint.setFillColor(sf::Color(80, 80, 100));
-    hint.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  ESC: Quit");
-    hint.setPosition(160.f, 580.f);
+    hint.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  Mouse: Aim (Triangle)  |  ESC: Quit");
+    hint.setPosition(80.f, 580.f);
     window.draw(hint);
 }
 
@@ -554,7 +581,7 @@ void Game::drawTitle()
     float yStart = 290.f;
     const char* descs[] = {
         "[1] CIRCLE  -  Fast. Dash through enemies.",
-        "[2] TRIANGLE  -  Ranged. Shoot projectiles.",
+        "[2] TRIANGLE  -  Ranged. Aim with mouse, shoot with Space.",
         "[3] SQUARE  -  Tank. Ground pound slam."
     };
     sf::Color colors[] = {
