@@ -374,7 +374,9 @@ void Player::addMaxHealth(int amount)
     if (maxHealth < 10) maxHealth = 10;
 }
 
+float Player::getSpeedMultiplier() const { return speedMult; }
 float Player::getDamageMultiplier() const { return damageMult; }
+float Player::getCooldownMultiplier() const { return cooldownMult; }
 void Player::setSpeedMultiplier(float mult) { speedMult = mult; }
 void Player::setDamageMultiplier(float mult) { damageMult = mult; }
 void Player::setCooldownMultiplier(float mult) { cooldownMult = mult; }

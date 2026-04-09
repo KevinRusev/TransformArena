@@ -37,7 +37,9 @@ public:
     void takeDamage(int amount);
     void heal(int amount);
     void addMaxHealth(int amount);
+    float getSpeedMultiplier() const;
     float getDamageMultiplier() const;
+    float getCooldownMultiplier() const;
     void setSpeedMultiplier(float mult);
     void setDamageMultiplier(float mult);
     void setCooldownMultiplier(float mult);
