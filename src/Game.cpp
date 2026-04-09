@@ -35,7 +35,7 @@ Game::Game(sf::RenderWindow& win)
 
 void Game::generateFloor()
 {
-    mapSize = 5 + currentFloor;
+    mapSize = 5 + (currentFloor - 1);
     if (mapSize > MAX_MAP) mapSize = MAX_MAP;
 
     for (int x = 0; x < MAX_MAP; x++)
@@ -56,7 +56,7 @@ void Game::generateFloor()
     rooms[startX][startY].gridY = startY;
     rooms[startX][startY].generate(currentFloor, RoomType::Start);
 
-    int roomCount = 4 + currentFloor * 2;
+    int roomCount = 4 + currentFloor;
     int dxDir[] = {0, 1, 0, -1};
     int dyDir[] = {-1, 0, 1, 0};
 
@@ -140,7 +140,7 @@ void Game::generateFloor()
     }
 
     // branch rooms off main path (not off boss room)
-    for (int b = 0; b < 2 + currentFloor; b++)
+    for (int b = 0; b < 1 + currentFloor; b++)
     {
         bool branchPlaced = false;
         for (int tries = 0; tries < 20 && !branchPlaced; tries++)

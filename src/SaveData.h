@@ -14,6 +14,7 @@ struct SaveData
     int health;
     int maxHealth;
     int form; // 0=circle, 1=triangle, 2=square
+    int equippedItemType;
     std::vector<int> buffIds;
 
     int highScore;
@@ -22,7 +23,7 @@ struct SaveData
 
     SaveData()
         : hasRun(false), floor(1), score(0), totalKills(0), playTime(0.f)
-        , health(100), maxHealth(100), form(0)
+        , health(100), maxHealth(100), form(0), equippedItemType(0)
         , highScore(0), highFloor(0), highKills(0)
     {}
 
@@ -44,6 +45,7 @@ struct SaveData
         f << "health=" << health << "\n";
         f << "max_health=" << maxHealth << "\n";
         f << "form=" << form << "\n";
+        f << "item=" << equippedItemType << "\n";
 
         f << "buffs=";
         for (size_t i = 0; i < buffIds.size(); i++)
@@ -82,6 +84,7 @@ struct SaveData
             else if (key == "health") health = std::stoi(val);
             else if (key == "max_health") maxHealth = std::stoi(val);
             else if (key == "form") form = std::stoi(val);
+            else if (key == "item") equippedItemType = std::stoi(val);
             else if (key == "buffs")
             {
                 buffIds.clear();
@@ -111,6 +114,7 @@ struct SaveData
         health = 100;
         maxHealth = 100;
         form = 0;
+        equippedItemType = 0;
         buffIds.clear();
     }
 
