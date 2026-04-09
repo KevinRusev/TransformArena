@@ -335,7 +335,7 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
             }
             else
             {
-                // circle around player, then charge
+                dashDir = dir;
                 position.x += dir.y * currentSpeed * 0.6f * dt;
                 position.y -= dir.x * currentSpeed * 0.6f * dt;
                 if (dist > 300.f)
@@ -562,7 +562,9 @@ void Enemy::draw(sf::RenderWindow& window)
     }
     case EnemyType::Dasher:
     {
-        sf::Vector2f fDir = dashCharging ? dashDir : sf::Vector2f(dir.x, dir.y);
+        sf::Vector2f fDir = dashDir;
+        if (std::abs(fDir.x) < 0.01f && std::abs(fDir.y) < 0.01f)
+            fDir = sf::Vector2f(0.f, 1.f);
         float angle = std::atan2(fDir.y, fDir.x) * 57.3f + 90.f;
         sf::ConvexShape shape(3);
         shape.setPoint(0, sf::Vector2f(0.f, -size * 1.3f));
