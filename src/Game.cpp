@@ -556,6 +556,20 @@ void Game::drawHUD()
     abilTxt.setPosition(660.f, 36.f);
     window.draw(abilTxt);
 
+    // cooldown bar
+    float cdBarW = 80.f, cdBarH = 4.f;
+    float cdPct = player.getCooldownPercent();
+
+    sf::RectangleShape cdBg(sf::Vector2f(cdBarW, cdBarH));
+    cdBg.setPosition(660.f, 55.f);
+    cdBg.setFillColor(sf::Color(40, 40, 40));
+    window.draw(cdBg);
+
+    sf::RectangleShape cdBar(sf::Vector2f(cdBarW * cdPct, cdBarH));
+    cdBar.setPosition(660.f, 55.f);
+    cdBar.setFillColor(cdPct >= 1.f ? sf::Color(255, 255, 255) : formColor);
+    window.draw(cdBar);
+
     // controls hint
     sf::Text hint;
     hint.setFont(font);

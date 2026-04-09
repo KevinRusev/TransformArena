@@ -332,6 +332,15 @@ float Player::getGroundPoundDamage() const { return poundDamage; }
 float Player::getDashDamage() const { return dashDamage; }
 bool Player::justTransformed() const { return transformFlash > 0.2f; }
 
+float Player::getCooldownPercent() const
+{
+    if (abilityCooldown <= 0.f) return 1.f;
+    float pct = 1.f - (cooldownTimer / abilityCooldown);
+    if (pct < 0.f) pct = 0.f;
+    if (pct > 1.f) pct = 1.f;
+    return pct;
+}
+
 void Player::takeDamage(int amount)
 {
     if (isInvincible())

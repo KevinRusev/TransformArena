@@ -32,6 +32,7 @@ public:
     float getGroundPoundDamage() const;
     float getDashDamage() const;
     bool wantsToShoot();
+    float getCooldownPercent() const;
 
     void takeDamage(int amount);
     void heal(int amount);
