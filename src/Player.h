@@ -36,6 +36,10 @@ public:
 
     void takeDamage(int amount);
     void heal(int amount);
+    void addMaxHealth(int amount);
+    void setSpeedMultiplier(float mult);
+    void setDamageMultiplier(float mult);
+    void setCooldownMultiplier(float mult);
     void reset(float x, float y);
     void setPosition(float x, float y);
     bool justTransformed() const;
@@ -76,6 +80,10 @@ private:
 
     float transformFlash;
     float invincibleTimer;
+
+    float speedMult;
+    float damageMult;
+    float cooldownMult;
 
     void applyFormStats();
 };

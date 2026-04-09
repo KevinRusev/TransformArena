@@ -16,6 +16,9 @@ Player::Player(float startX, float startY)
     , cooldownTimer(0.f)
     , transformFlash(0.f)
     , invincibleTimer(0.f)
+    , speedMult(1.f)
+    , damageMult(1.f)
+    , cooldownMult(1.f)
 {
     applyFormStats();
     health = maxHealth;
@@ -98,8 +101,9 @@ void Player::update(float dt)
     }
     else
     {
-        position.x += velocity.x * speed * dt;
-        position.y += velocity.y * speed * dt;
+        float effectiveSpeed = speed * speedMult;
+        position.x += velocity.x * effectiveSpeed * dt;
+        position.y += velocity.y * effectiveSpeed * dt;
     }
 
     float padding = size + 5.f;
@@ -254,6 +258,8 @@ void Player::useAbility()
     if (cooldownTimer > 0.f)
         return;
 
+    float effCooldown = abilityCooldown * cooldownMult;
+
     switch (currentForm)
     {
     case Form::Circle:
@@ -261,8 +267,8 @@ void Player::useAbility()
         {
             dashing = true;
             dashTimer = dashDuration;
-            invincibleTimer = dashDuration;
-            cooldownTimer = abilityCooldown;
+            invincibleTimer = dashDuration + 0.15f;
+            cooldownTimer = effCooldown;
         }
         break;
 
@@ -271,7 +277,7 @@ void Player::useAbility()
         {
             shootRequest = true;
             shootTimer = shootCooldown;
-            cooldownTimer = abilityCooldown;
+            cooldownTimer = effCooldown;
         }
         break;
 
@@ -281,7 +287,7 @@ void Player::useAbility()
             groundPounding = true;
             poundDamageReady = true;
             poundTimer = poundDuration;
-            cooldownTimer = abilityCooldown;
+            cooldownTimer = effCooldown;
         }
         break;
     }
@@ -328,8 +334,8 @@ bool Player::consumePoundDamage()
     return false;
 }
 float Player::getGroundPoundRadius() const { return poundRadius; }
-float Player::getGroundPoundDamage() const { return poundDamage; }
-float Player::getDashDamage() const { return dashDamage; }
+float Player::getGroundPoundDamage() const { return poundDamage * damageMult; }
+float Player::getDashDamage() const { return dashDamage * damageMult; }
 bool Player::justTransformed() const { return transformFlash > 0.2f; }
 
 float Player::getCooldownPercent() const
@@ -360,6 +366,18 @@ void Player::heal(int amount)
     if (health > maxHealth) health = maxHealth;
 }
 
+void Player::addMaxHealth(int amount)
+{
+    maxHealth += amount;
+    health += amount;
+    if (health < 1) health = 1;
+    if (maxHealth < 10) maxHealth = 10;
+}
+
+void Player::setSpeedMultiplier(float mult) { speedMult = mult; }
+void Player::setDamageMultiplier(float mult) { damageMult = mult; }
+void Player::setCooldownMultiplier(float mult) { cooldownMult = mult; }
+
 void Player::setPosition(float x, float y)
 {
     position = sf::Vector2f(x, y);
@@ -370,6 +388,9 @@ void Player::reset(float x, float y)
     position = sf::Vector2f(x, y);
     facing = sf::Vector2f(0.f, -1.f);
     currentForm = Form::Circle;
+    speedMult = 1.f;
+    damageMult = 1.f;
+    cooldownMult = 1.f;
     applyFormStats();
     health = maxHealth;
     dashing = false;

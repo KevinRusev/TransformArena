@@ -1116,10 +1116,23 @@ void Game::applyBuff(const Buff& buff)
 
     ownedBuffs.push_back(buff);
 
-    if (buff.healthBonus > 0)
-        player.heal(buff.healthBonus);
-    if (buff.healthBonus < 0)
-        player.takeDamage(-buff.healthBonus);
+    // recalculate all multipliers from owned buffs
+    float spd = 1.f, dmg = 1.f, cd = 1.f;
+    for (auto& b : ownedBuffs)
+    {
+        spd += b.speedBonus;
+        dmg += b.damageBonus;
+        cd -= b.cooldownReduction;
+    }
+    if (cd < 0.3f) cd = 0.3f;
+    player.setSpeedMultiplier(spd);
+    player.setDamageMultiplier(dmg);
+    player.setCooldownMultiplier(cd);
+
+    if (buff.healthBonus != 0)
+        player.addMaxHealth(buff.healthBonus);
+
+    player.heal(30);
 }
 
 void Game::spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float sz)
