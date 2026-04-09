@@ -123,13 +123,6 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
             position.y -= dir.x * currentSpeed * 0.5f * dt;
         }
 
-        // keep in bounds
-        if (position.x < size) position.x = size;
-        if (position.x > 800.f - size) position.x = 800.f - size;
-        if (position.y < size) position.y = size;
-        if (position.y > 600.f - size) position.y = 600.f - size;
-
-        // fire projectiles at the player
         shootTimer -= dt;
         if (shootTimer <= 0.f && dist < 400.f)
         {
@@ -141,6 +134,13 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
         break;
     }
     }
+
+    // clamp all enemies inside room walls
+    float wall = 20.f;
+    if (position.x - size < wall) position.x = wall + size;
+    if (position.x + size > 800.f - wall) position.x = 800.f - wall - size;
+    if (position.y - size < wall) position.y = wall + size;
+    if (position.y + size > 600.f - wall) position.y = 600.f - wall - size;
 
     // boss shooting: spread of projectiles on a timer
     if (bossFlag)
