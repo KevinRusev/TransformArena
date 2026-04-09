@@ -69,6 +69,13 @@ private:
     bool bossAlive;
     float bossIntroTimer;
 
+    bool portalActive;
+    float portalPulse;
+    sf::Vector2f portalPos;
+
+    float floorFadeTimer;
+    float floorFadeDir; // 1 = fading to black, -1 = fading in
+
     std::vector<Buff> ownedBuffs;
     std::vector<Buff> buffChoices;
     bool choosingBuff;
@@ -99,6 +106,8 @@ private:
     void drawTitle();
     void drawGameOver();
     void drawBuffChoice();
+    void drawPortal();
+    void drawFloorFade();
     void drawRoomTransition();
     void restart();
     void nextFloor();

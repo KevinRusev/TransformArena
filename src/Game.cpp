@@ -17,6 +17,8 @@ Game::Game(sf::RenderWindow& win)
     , shakeIntensity(0.f), shakeTimer(0.f), shakeOffset(0.f, 0.f)
     , transitionTimer(0.f), transitionDir(-1)
     , bossAlive(false), bossIntroTimer(0.f)
+    , portalActive(false), portalPulse(0.f), portalPos(400.f, 300.f)
+    , floorFadeTimer(0.f), floorFadeDir(0.f)
     , choosingBuff(false)
     , barrierTimer(0.f)
     , hasContinue(false), titleSelection(0)
@@ -283,11 +285,11 @@ void Game::handleEvent(const sf::Event& event)
         if (choosingBuff)
         {
             if (event.key.code == sf::Keyboard::Num1 && buffChoices.size() > 0)
-            { applyBuff(buffChoices[0]); choosingBuff = false; nextFloor(); }
+            { applyBuff(buffChoices[0]); choosingBuff = false; floorFadeTimer = 1.5f; floorFadeDir = 1.f; }
             else if (event.key.code == sf::Keyboard::Num2 && buffChoices.size() > 1)
-            { applyBuff(buffChoices[1]); choosingBuff = false; nextFloor(); }
+            { applyBuff(buffChoices[1]); choosingBuff = false; floorFadeTimer = 1.5f; floorFadeDir = 1.f; }
             else if (event.key.code == sf::Keyboard::Num3 && buffChoices.size() > 2)
-            { applyBuff(buffChoices[2]); choosingBuff = false; nextFloor(); }
+            { applyBuff(buffChoices[2]); choosingBuff = false; floorFadeTimer = 1.5f; floorFadeDir = 1.f; }
             return;
         }
 
@@ -381,6 +383,23 @@ void Game::update(float dt)
     if (transitionTimer > 0.f)
     {
         transitionTimer -= dt;
+        return;
+    }
+
+    if (floorFadeTimer > 0.f)
+    {
+        floorFadeTimer -= dt;
+        if (floorFadeDir > 0.f && floorFadeTimer <= 0.75f)
+        {
+            floorFadeDir = -1.f;
+            portalActive = false;
+            nextFloor();
+        }
+        if (floorFadeTimer <= 0.f)
+        {
+            floorFadeTimer = 0.f;
+            floorFadeDir = 0.f;
+        }
         return;
     }
 
@@ -525,7 +544,18 @@ void Game::update(float dt)
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
 
-    if (currentRoom().isBossRoom() && currentRoom().isCleared() && !choosingBuff && !bossAlive)
+    if (currentRoom().isBossRoom() && currentRoom().isCleared() && !portalActive && !choosingBuff && !bossAlive)
+    {
+        portalActive = true;
+        portalPulse = 0.f;
+        portalPos = sf::Vector2f(400.f, 300.f);
+    }
+
+    if (portalActive)
+        portalPulse += dt;
+
+    // player enters portal
+    if (portalActive && !choosingBuff && dist(player.getPosition(), portalPos) < 35.f)
     {
         if (currentFloor >= totalFloors)
         {
@@ -535,6 +565,7 @@ void Game::update(float dt)
             saveData.totalKills = totalKills;
             saveData.floor = currentFloor;
             updateHighScores();
+            portalActive = false;
         }
         else
         {
@@ -758,6 +789,9 @@ void Game::draw()
 
     currentRoom().draw(window);
 
+    if (portalActive)
+        drawPortal();
+
     for (auto& proj : projectiles)
         proj.draw(window);
 
@@ -827,6 +861,9 @@ void Game::draw()
 
     if (transitionTimer > 0.f)
         drawRoomTransition();
+
+    if (floorFadeTimer > 0.f)
+        drawFloorFade();
 }
 
 void Game::drawMinimap()
@@ -1382,6 +1419,103 @@ void Game::drawBuffChoice()
     }
 }
 
+void Game::drawPortal()
+{
+    float pulse = std::sin(portalPulse * 3.f) * 0.15f + 1.f;
+    float baseR = 28.f * pulse;
+
+    // outer glow
+    sf::CircleShape glow(baseR + 16.f, 32);
+    glow.setOrigin(baseR + 16.f, baseR + 16.f);
+    glow.setPosition(portalPos);
+    glow.setFillColor(sf::Color(80, 40, 200, 40));
+    window.draw(glow);
+
+    // spinning ring
+    sf::CircleShape ring(baseR, 32);
+    ring.setOrigin(baseR, baseR);
+    ring.setPosition(portalPos);
+    ring.setFillColor(sf::Color(20, 10, 60, 180));
+    ring.setOutlineColor(sf::Color(140, 80, 255, (sf::Uint8)(180 + 40 * std::sin(portalPulse * 5.f))));
+    ring.setOutlineThickness(3.f);
+    window.draw(ring);
+
+    // inner swirl
+    sf::CircleShape inner(baseR * 0.6f, 32);
+    inner.setOrigin(baseR * 0.6f, baseR * 0.6f);
+    inner.setPosition(portalPos);
+    inner.setFillColor(sf::Color(100, 50, 220, 120));
+    window.draw(inner);
+
+    // core bright dot
+    sf::CircleShape core(5.f * pulse, 16);
+    core.setOrigin(5.f * pulse, 5.f * pulse);
+    core.setPosition(portalPos);
+    core.setFillColor(sf::Color(220, 180, 255));
+    window.draw(core);
+
+    // orbiting particles
+    for (int i = 0; i < 4; i++)
+    {
+        float angle = portalPulse * 2.5f + i * 1.5708f;
+        float ox = std::cos(angle) * baseR * 0.8f;
+        float oy = std::sin(angle) * baseR * 0.8f;
+        sf::CircleShape orb(3.f);
+        orb.setOrigin(3.f, 3.f);
+        orb.setPosition(portalPos.x + ox, portalPos.y + oy);
+        orb.setFillColor(sf::Color(180, 140, 255, 200));
+        window.draw(orb);
+    }
+
+    if (fontLoaded)
+    {
+        sf::Text hint;
+        hint.setFont(font);
+        hint.setCharacterSize(12);
+        hint.setFillColor(sf::Color(180, 140, 255, (sf::Uint8)(150 + 80 * std::sin(portalPulse * 2.f))));
+        hint.setString("Enter Portal");
+        sf::FloatRect b = hint.getLocalBounds();
+        hint.setPosition(portalPos.x - b.width / 2.f, portalPos.y - baseR - 22.f);
+        window.draw(hint);
+    }
+}
+
+void Game::drawFloorFade()
+{
+    float alpha;
+    if (floorFadeDir > 0.f)
+    {
+        // fading to black (1.5 -> 0.75)
+        float t = (floorFadeTimer - 0.75f) / 0.75f;
+        if (t < 0.f) t = 0.f;
+        alpha = 1.f - t;
+    }
+    else
+    {
+        // fading back in (0.75 -> 0)
+        float t = floorFadeTimer / 0.75f;
+        alpha = t;
+    }
+    if (alpha < 0.f) alpha = 0.f;
+    if (alpha > 1.f) alpha = 1.f;
+
+    sf::RectangleShape fade(sf::Vector2f(800.f, 600.f));
+    fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(255 * alpha)));
+    window.draw(fade);
+
+    if (fontLoaded && alpha > 0.8f)
+    {
+        sf::Text floorTxt;
+        floorTxt.setFont(font);
+        floorTxt.setCharacterSize(36);
+        floorTxt.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(255 * std::min(1.f, (alpha - 0.8f) * 5.f))));
+        floorTxt.setString("Floor " + std::to_string(currentFloor));
+        sf::FloatRect b = floorTxt.getLocalBounds();
+        floorTxt.setPosition(400.f - b.width / 2.f, 270.f);
+        window.draw(floorTxt);
+    }
+}
+
 void Game::drawRoomTransition()
 {
     float t = transitionTimer / 0.3f;
@@ -1418,6 +1552,10 @@ void Game::restart()
     shakeOffset = sf::Vector2f(0.f, 0.f);
     transitionTimer = 0.f;
     bossAlive = false;
+    portalActive = false;
+    portalPulse = 0.f;
+    floorFadeTimer = 0.f;
+    floorFadeDir = 0.f;
 
     generateFloor();
 }
