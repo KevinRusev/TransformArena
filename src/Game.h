@@ -7,6 +7,7 @@
 #include "Projectile.h"
 #include "Particle.h"
 #include "Room.h"
+#include "SaveData.h"
 
 enum class GameState { Title, Playing, GameOver, BossIntro };
 
@@ -67,6 +68,10 @@ private:
     std::vector<Buff> buffChoices;
     bool choosingBuff;
 
+    SaveData saveData;
+    bool hasContinue;
+    int titleSelection; // 0=new game, 1=continue
+
     sf::Font font;
     bool fontLoaded;
 
@@ -88,6 +93,9 @@ private:
     void drawRoomTransition();
     void restart();
     void nextFloor();
+    void saveGame();
+    void loadGame();
+    void updateHighScores();
     void generateBuffChoices();
     void applyBuff(const Buff& buff);
     Buff randomBuff();

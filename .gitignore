@@ -42,3 +42,6 @@ ipch/
 # Assignment PPT (personal, not code)
 *.ppt
 *.pptx
+
+# Save file
+savegame.txt

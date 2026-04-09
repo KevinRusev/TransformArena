@@ -97,6 +97,7 @@
     <ClInclude Include="src\Room.h" />
     <ClInclude Include="src\Projectile.h" />
     <ClInclude Include="src\Particle.h" />
+    <ClInclude Include="src\SaveData.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

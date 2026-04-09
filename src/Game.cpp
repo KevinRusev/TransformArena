@@ -17,6 +17,8 @@ Game::Game(sf::RenderWindow& win)
     , transitionTimer(0.f), transitionDir(-1)
     , bossAlive(false), bossIntroTimer(0.f)
     , choosingBuff(false)
+    , hasContinue(false)
+    , titleSelection(0)
     , fontLoaded(false)
 {
     std::srand((unsigned int)std::time(nullptr));
@@ -25,6 +27,9 @@ Game::Game(sf::RenderWindow& win)
         fontLoaded = true;
     else if (font.loadFromFile("assets/font.ttf"))
         fontLoaded = true;
+
+    saveData.load();
+    hasContinue = saveData.hasRun;
 }
 
 void Game::generateFloor()
@@ -137,10 +142,26 @@ void Game::handleEvent(const sf::Event& event)
     switch (state)
     {
     case GameState::Title:
-        if (event.key.code == sf::Keyboard::Enter || event.key.code == sf::Keyboard::Space)
+        if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::W)
         {
-            state = GameState::Playing;
-            restart();
+            if (hasContinue) titleSelection = (titleSelection == 0) ? 1 : 0;
+        }
+        else if (event.key.code == sf::Keyboard::Down || event.key.code == sf::Keyboard::S)
+        {
+            if (hasContinue) titleSelection = (titleSelection == 0) ? 1 : 0;
+        }
+        else if (event.key.code == sf::Keyboard::Enter || event.key.code == sf::Keyboard::Space)
+        {
+            if (titleSelection == 1 && hasContinue)
+            {
+                loadGame();
+                state = GameState::Playing;
+            }
+            else
+            {
+                state = GameState::Playing;
+                restart();
+            }
         }
         break;
 
@@ -322,6 +343,10 @@ void Game::update(float dt)
         {
             state = GameState::GameOver;
             score += 1000 * currentFloor;
+            saveData.score = score;
+            saveData.totalKills = totalKills;
+            saveData.floor = currentFloor;
+            updateHighScores();
         }
         else
         {
@@ -337,6 +362,10 @@ void Game::update(float dt)
         state = GameState::GameOver;
         addScreenShake(12.f, 0.4f);
         spawnParticles(player.getPosition(), sf::Color::White, 30, 250.f, 6.f);
+        saveData.score = score;
+        saveData.totalKills = totalKills;
+        saveData.floor = currentFloor;
+        updateHighScores();
     }
 }
 
@@ -854,15 +883,40 @@ void Game::drawTitle()
     controls.setPosition(400.f - b.width / 2.f, 340.f);
     window.draw(controls);
 
-    sf::Text start;
-    start.setFont(font);
-    start.setCharacterSize(20);
-    float pulse = (std::sin((float)std::clock() / 300.f) + 1.f) / 2.f;
-    start.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(120 + 135 * pulse)));
-    start.setString("Press ENTER or SPACE to start");
-    b = start.getLocalBounds();
-    start.setPosition(400.f - b.width / 2.f, 400.f);
-    window.draw(start);
+    // menu options
+    float menuY = 390.f;
+    sf::Text newGame;
+    newGame.setFont(font);
+    newGame.setCharacterSize(20);
+    newGame.setFillColor(titleSelection == 0 ? sf::Color::White : sf::Color(100, 100, 120));
+    newGame.setString(titleSelection == 0 ? "> New Game" : "  New Game");
+    b = newGame.getLocalBounds();
+    newGame.setPosition(400.f - b.width / 2.f, menuY);
+    window.draw(newGame);
+
+    if (hasContinue)
+    {
+        sf::Text cont;
+        cont.setFont(font);
+        cont.setCharacterSize(20);
+        cont.setFillColor(titleSelection == 1 ? sf::Color::White : sf::Color(100, 100, 120));
+        cont.setString(titleSelection == 1 ? "> Continue (Floor " + std::to_string(saveData.floor) + ")" : "  Continue (Floor " + std::to_string(saveData.floor) + ")");
+        b = cont.getLocalBounds();
+        cont.setPosition(400.f - b.width / 2.f, menuY + 28.f);
+        window.draw(cont);
+    }
+
+    if (saveData.highScore > 0)
+    {
+        sf::Text hi;
+        hi.setFont(font);
+        hi.setCharacterSize(14);
+        hi.setFillColor(sf::Color(255, 220, 80));
+        hi.setString("High Score: " + std::to_string(saveData.highScore) + "  |  Best Floor: " + std::to_string(saveData.highFloor));
+        b = hi.getLocalBounds();
+        hi.setPosition(400.f - b.width / 2.f, 470.f);
+        window.draw(hi);
+    }
 }
 
 void Game::drawGameOver()
@@ -917,13 +971,25 @@ void Game::drawGameOver()
         statY += 24.f;
     }
 
+    if (saveData.highScore > 0)
+    {
+        sf::Text hi;
+        hi.setFont(font);
+        hi.setCharacterSize(14);
+        hi.setFillColor(sf::Color(255, 220, 80));
+        hi.setString("High Score: " + std::to_string(saveData.highScore));
+        b = hi.getLocalBounds();
+        hi.setPosition(400.f - b.width / 2.f, statY + 10.f);
+        window.draw(hi);
+    }
+
     sf::Text restartTxt;
     restartTxt.setFont(font);
     restartTxt.setCharacterSize(18);
     restartTxt.setFillColor(sf::Color(180, 180, 180));
     restartTxt.setString("Press R to restart");
     b = restartTxt.getLocalBounds();
-    restartTxt.setPosition(400.f - b.width / 2.f, 380.f);
+    restartTxt.setPosition(400.f - b.width / 2.f, 400.f);
     window.draw(restartTxt);
 }
 
@@ -1041,6 +1107,89 @@ void Game::nextFloor()
     dmgNumbers.clear();
     bossAlive = false;
     generateFloor();
+    saveGame();
+}
+
+void Game::saveGame()
+{
+    saveData.hasRun = true;
+    saveData.floor = currentFloor;
+    saveData.score = score;
+    saveData.totalKills = totalKills;
+    saveData.playTime = playTime;
+    saveData.health = player.getHealth();
+    saveData.maxHealth = player.getMaxHealth();
+    saveData.form = (int)player.getForm();
+
+    saveData.buffIds.clear();
+    for (auto& b : ownedBuffs)
+        saveData.buffIds.push_back(b.id);
+
+    saveData.save();
+}
+
+void Game::loadGame()
+{
+    currentFloor = saveData.floor;
+    score = saveData.score;
+    totalKills = saveData.totalKills;
+    playTime = saveData.playTime;
+    scoreMultiplier = 1;
+    multiplierTimer = 0.f;
+    damageCooldown = 0.f;
+    bossAlive = false;
+    choosingBuff = false;
+    ownedBuffs.clear();
+    buffChoices.clear();
+
+    generateFloor();
+
+    // restore player state
+    player.heal(saveData.health - player.getHealth());
+    if (saveData.form == 1) player.transform(Form::Triangle);
+    else if (saveData.form == 2) player.transform(Form::Square);
+
+    // rebuild buffs
+    for (int id : saveData.buffIds)
+    {
+        Buff b;
+        b.id = id;
+        b.speedBonus = 0.f;
+        b.damageBonus = 0.f;
+        b.healthBonus = 0;
+        b.cooldownReduction = 0.f;
+        switch (id)
+        {
+        case 0: b.name = "Swift Feet"; b.speedBonus = 0.15f; break;
+        case 1: b.name = "Sharp Edge"; b.damageBonus = 0.2f; break;
+        case 2: b.name = "Iron Skin"; b.healthBonus = 30; break;
+        case 3: b.name = "Quick Hands"; b.cooldownReduction = 0.25f; break;
+        case 4: b.name = "Glass Cannon"; b.damageBonus = 0.4f; b.healthBonus = -20; break;
+        case 5: b.name = "Vitality"; b.healthBonus = 50; break;
+        }
+        ownedBuffs.push_back(b);
+    }
+
+    // apply buff multipliers
+    float spd = 1.f, dmg = 1.f, cd = 1.f;
+    for (auto& b : ownedBuffs)
+    {
+        spd += b.speedBonus;
+        dmg += b.damageBonus;
+        cd -= b.cooldownReduction;
+    }
+    if (cd < 0.3f) cd = 0.3f;
+    player.setSpeedMultiplier(spd);
+    player.setDamageMultiplier(dmg);
+    player.setCooldownMultiplier(cd);
+}
+
+void Game::updateHighScores()
+{
+    saveData.updateHighScores();
+    saveData.clearRun();
+    saveData.save();
+    hasContinue = false;
 }
 
 Buff Game::randomBuff()
