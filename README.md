@@ -1,13 +1,13 @@
-# CMGT Programming Intake Assignment
+# Transform Arena
 
-My programming intake assignment for Breda University of Applied Sciences (CMGT).
+A roguelike arena game built with C++ and SFML for the CMGT Programming assignment at Breda University.
 
-## Setup
+## Theme: Transform
+Switch between Circle, Triangle and Square forms mid-combat. Each form has unique stats and abilities.
 
-- Uses SFML 2.6.2 (included in the `SFML/` folder)
-- Open `TransformGame.sln` in Visual Studio 2022
-- Build and run with F5 (works in both Debug and Release, x64)
+## How to Build
+1. Open `TransformGame.sln` in Visual Studio 2022
+2. Set configuration to Release x64
+3. Build and run (Ctrl+F5)
 
-## How to Play
-
-See `readme.txt` for game instructions and controls.
+Requires SFML 2.6.2 (included in `lib/` and `include/` folders).
