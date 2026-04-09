@@ -34,7 +34,7 @@ Game::Game(sf::RenderWindow& win)
 
 void Game::generateFloor()
 {
-    mapSize = 5 + currentFloor; // 6,7,8 for floors 1,2,3
+    mapSize = 5 + currentFloor;
     if (mapSize > MAX_MAP) mapSize = MAX_MAP;
 
     for (int x = 0; x < MAX_MAP; x++)
@@ -45,35 +45,66 @@ void Game::generateFloor()
     currentRoomX = startX;
     currentRoomY = startY;
 
+    // track which grid cells are occupied
+    bool used[MAX_MAP][MAX_MAP] = {};
+
     std::vector<std::pair<int,int>> path;
     path.push_back({startX, startY});
+    used[startX][startY] = true;
     rooms[startX][startY].gridX = startX;
     rooms[startX][startY].gridY = startY;
     rooms[startX][startY].generate(currentFloor, RoomType::Start);
 
-    // main path rooms: floor1=5, floor2=7, floor3=9
     int roomCount = 4 + currentFloor * 2;
-    int dx[] = {0, 1, 0, -1};
-    int dy[] = {-1, 0, 1, 0};
+    int dxDir[] = {0, 1, 0, -1};
+    int dyDir[] = {-1, 0, 1, 0};
 
     int cx = startX, cy = startY;
     int shopPlaced = -1;
-    int shopTarget = roomCount / 2; // shop in the middle
+    int shopTarget = roomCount / 2;
+    int failCount = 0;
 
     for (int i = 0; i < roomCount; i++)
     {
+        // check if current position has any free neighbor
+        bool hasNeighbor = false;
+        for (int d = 0; d < 4; d++)
+        {
+            int nx = cx + dxDir[d], ny = cy + dyDir[d];
+            if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize && !used[nx][ny])
+            { hasNeighbor = true; break; }
+        }
+
+        if (!hasNeighbor)
+        {
+            // backtrack along path until we find a room with free neighbors
+            bool found = false;
+            for (int back = (int)path.size() - 2; back >= 0; back--)
+            {
+                int bx = path[back].first, by = path[back].second;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = bx + dxDir[d], ny = by + dyDir[d];
+                    if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize && !used[nx][ny])
+                    { found = true; break; }
+                }
+                if (found) { cx = bx; cy = by; break; }
+            }
+            if (!found) break;
+            i--;
+            failCount++;
+            if (failCount > 50) break;
+            continue;
+        }
+
+        // pick random free neighbor
         bool placed = false;
-        for (int attempts = 0; attempts < 30; attempts++)
+        for (int attempts = 0; attempts < 20; attempts++)
         {
             int dir = std::rand() % 4;
-            int nx = cx + dx[dir];
-            int ny = cy + dy[dir];
+            int nx = cx + dxDir[dir], ny = cy + dyDir[dir];
             if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize) continue;
-
-            bool inPath = false;
-            for (auto& p : path)
-                if (p.first == nx && p.second == ny) { inPath = true; break; }
-            if (inPath) continue;
+            if (used[nx][ny]) continue;
 
             rooms[cx][cy].setDoor(dir, true);
             rooms[nx][ny].setDoor((dir + 2) % 4, true);
@@ -90,6 +121,7 @@ void Game::generateFloor()
             rooms[nx][ny].gridX = nx;
             rooms[nx][ny].gridY = ny;
             rooms[nx][ny].generate(currentFloor, type);
+            used[nx][ny] = true;
 
             path.push_back({nx, ny});
             cx = nx;
@@ -100,40 +132,37 @@ void Game::generateFloor()
 
         if (!placed)
         {
-            if (path.size() > 1)
-            {
-                cx = path[path.size() - 2].first;
-                cy = path[path.size() - 2].second;
-            }
             i--;
+            failCount++;
+            if (failCount > 50) break;
         }
     }
 
-    // branch rooms (not after boss)
+    // branch rooms off main path (not off boss room)
     for (int b = 0; b < 2 + currentFloor; b++)
     {
-        int idx = std::rand() % ((int)path.size() - 1); // exclude boss from being branch source
-        int bx = path[idx].first, by = path[idx].second;
-        int dir = std::rand() % 4;
-        int nx = bx + dx[dir], ny = by + dy[dir];
-        if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize)
+        bool branchPlaced = false;
+        for (int tries = 0; tries < 20 && !branchPlaced; tries++)
         {
-            bool exists = false;
-            for (auto& p : path)
-                if (p.first == nx && p.second == ny) { exists = true; break; }
-            if (!exists)
+            int idx = std::rand() % std::max(1, (int)path.size() - 1);
+            int bx = path[idx].first, by = path[idx].second;
+            int dir = std::rand() % 4;
+            int nx = bx + dxDir[dir], ny = by + dyDir[dir];
+            if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize && !used[nx][ny])
             {
                 rooms[bx][by].setDoor(dir, true);
                 rooms[nx][ny].setDoor((dir + 2) % 4, true);
                 rooms[nx][ny].gridX = nx;
                 rooms[nx][ny].gridY = ny;
                 rooms[nx][ny].generate(currentFloor, RoomType::Normal);
+                used[nx][ny] = true;
                 path.push_back({nx, ny});
+                branchPlaced = true;
             }
         }
     }
 
-    // if shop wasn't placed, convert a branch room
+    // ensure shop exists
     if (shopPlaced < 0)
     {
         for (size_t i = 1; i < path.size() - 1; i++)
@@ -152,7 +181,6 @@ void Game::generateFloor()
     rooms[startX][startY].markVisited();
     player.reset(400.f, 300.f);
 
-    // reapply buff multipliers after reset
     float spd = 1.f, dmg = 1.f, cd = 1.f;
     for (auto& buff : ownedBuffs)
     {
