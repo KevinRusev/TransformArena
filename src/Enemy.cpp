@@ -2,7 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 
-Enemy::Enemy(float x, float y, EnemyType type)
+Enemy::Enemy(float x, float y, EnemyType type, bool isBoss)
     : position(x, y)
     , velocity(0.f, 0.f)
     , knockbackVel(0.f, 0.f)
@@ -12,6 +12,7 @@ Enemy::Enemy(float x, float y, EnemyType type)
     , shootTimer(0.f)
     , shootInterval(1.5f)
     , preferredRange(250.f)
+    , bossFlag(isBoss)
 {
     switch (type)
     {
@@ -37,7 +38,16 @@ Enemy::Enemy(float x, float y, EnemyType type)
         break;
     }
     maxHealth = health;
-    // stagger initial shoot timers so they don't all fire at once
+
+    if (bossFlag)
+    {
+        health *= 5.f;
+        maxHealth = health;
+        size *= 2.2f;
+        speed *= 0.7f;
+        contactDamage *= 2;
+    }
+
     shootTimer = (float)(std::rand() % 100) / 100.f * shootInterval;
 }
 
@@ -143,8 +153,17 @@ void Enemy::draw(sf::RenderWindow& window)
     if (hitFlash > 0.f)
         color = sf::Color(255, 255, 255);
 
-    // health bar when damaged
-    if (health < maxHealth)
+    if (bossFlag)
+    {
+        float glowSize = size * 1.5f;
+        sf::CircleShape glow(glowSize);
+        glow.setOrigin(glowSize, glowSize);
+        glow.setPosition(position);
+        glow.setFillColor(sf::Color(255, 40, 40, 30));
+        window.draw(glow);
+    }
+
+    if (health < maxHealth && !bossFlag)
     {
         float barWidth = size * 2.2f;
         float barHeight = 3.f;
@@ -257,6 +276,9 @@ void Enemy::markDashHit() { dashHitCooldown = 0.3f; }
 
 sf::Vector2f Enemy::getPosition() const { return position; }
 float Enemy::getRadius() const { return size; }
+float Enemy::getHealth() const { return health; }
+float Enemy::getMaxHealth() const { return maxHealth; }
 bool Enemy::isAlive() const { return health > 0.f; }
+bool Enemy::isBoss() const { return bossFlag; }
 int Enemy::getContactDamage() const { return contactDamage; }
 EnemyType Enemy::getType() const { return type; }

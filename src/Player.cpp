@@ -360,6 +360,11 @@ void Player::heal(int amount)
     if (health > maxHealth) health = maxHealth;
 }
 
+void Player::setPosition(float x, float y)
+{
+    position = sf::Vector2f(x, y);
+}
+
 void Player::reset(float x, float y)
 {
     position = sf::Vector2f(x, y);

@@ -26,7 +26,19 @@ void Room::spawnEnemies()
     spawned = true;
 
     if (boss)
-        return; // boss spawning handled separately
+    {
+        enemies.emplace_back(400.f, 200.f, EnemyType::Brute, true);
+        // add some minions too
+        int minions = 2 + floorNum;
+        for (int i = 0; i < minions; i++)
+        {
+            float ex = 150.f + (float)(std::rand() % 500);
+            float ey = 100.f + (float)(std::rand() % 300);
+            EnemyType mt = (std::rand() % 2 == 0) ? EnemyType::Shooter : EnemyType::Chaser;
+            enemies.emplace_back(ex, ey, mt);
+        }
+        return;
+    }
 
     int baseCount = 3 + floorNum * 2;
     int count = baseCount + std::rand() % 3;

@@ -37,6 +37,7 @@ public:
     void takeDamage(int amount);
     void heal(int amount);
     void reset(float x, float y);
+    void setPosition(float x, float y);
     bool justTransformed() const;
 
 private:

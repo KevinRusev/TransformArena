@@ -2,26 +2,21 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <string>
 #include <algorithm>
 
 Game::Game(sf::RenderWindow& win)
     : window(win)
     , player(400.f, 300.f)
+    , currentRoomX(2), currentRoomY(2)
+    , currentFloor(1), totalFloors(3)
+    , bossRoomX(0), bossRoomY(0)
     , state(GameState::Title)
-    , score(0)
-    , scoreMultiplier(1)
-    , multiplierTimer(0.f)
-    , wave(0)
-    , enemiesPerWave(3)
-    , waveTimer(0.f)
-    , waveDelay(2.5f)
-    , damageCooldown(0.f)
-    , shakeIntensity(0.f)
-    , shakeTimer(0.f)
-    , shakeOffset(0.f, 0.f)
-    , waveAnnounceTimer(0.f)
-    , waveAnnounceNum(0)
+    , score(0), scoreMultiplier(1), multiplierTimer(0.f)
+    , damageCooldown(0.f), totalKills(0), playTime(0.f)
+    , shakeIntensity(0.f), shakeTimer(0.f), shakeOffset(0.f, 0.f)
+    , transitionTimer(0.f), transitionDir(-1)
+    , bossAlive(false), bossIntroTimer(0.f)
+    , choosingBuff(false)
     , fontLoaded(false)
 {
     std::srand((unsigned int)std::time(nullptr));
@@ -30,6 +25,108 @@ Game::Game(sf::RenderWindow& win)
         fontLoaded = true;
     else if (font.loadFromFile("assets/font.ttf"))
         fontLoaded = true;
+}
+
+void Game::generateFloor()
+{
+    for (int x = 0; x < MAP_SIZE; x++)
+        for (int y = 0; y < MAP_SIZE; y++)
+            rooms[x][y] = Room();
+
+    int startX = 2, startY = 2;
+    currentRoomX = startX;
+    currentRoomY = startY;
+
+    std::vector<std::pair<int,int>> path;
+    path.push_back({startX, startY});
+    rooms[startX][startY].gridX = startX;
+    rooms[startX][startY].gridY = startY;
+    rooms[startX][startY].generate(currentFloor, false);
+
+    int roomCount = 4 + currentFloor;
+    int dx[] = {0, 1, 0, -1};
+    int dy[] = {-1, 0, 1, 0};
+
+    int cx = startX, cy = startY;
+    for (int i = 0; i < roomCount; i++)
+    {
+        bool placed = false;
+        for (int attempts = 0; attempts < 20; attempts++)
+        {
+            int dir = std::rand() % 4;
+            int nx = cx + dx[dir];
+            int ny = cy + dy[dir];
+            if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
+
+            bool inPath = false;
+            for (auto& p : path)
+                if (p.first == nx && p.second == ny) { inPath = true; break; }
+            if (inPath) continue;
+
+            rooms[cx][cy].setDoor(dir, true);
+            int oppDir = (dir + 2) % 4;
+            rooms[nx][ny].setDoor(oppDir, true);
+
+            bool isBoss = (i == roomCount - 1);
+            rooms[nx][ny].gridX = nx;
+            rooms[nx][ny].gridY = ny;
+            rooms[nx][ny].generate(currentFloor, isBoss);
+
+            if (isBoss)
+            {
+                bossRoomX = nx;
+                bossRoomY = ny;
+            }
+
+            path.push_back({nx, ny});
+            cx = nx;
+            cy = ny;
+            placed = true;
+            break;
+        }
+
+        if (!placed)
+        {
+            if (path.size() > 1)
+            {
+                cx = path[path.size() - 2].first;
+                cy = path[path.size() - 2].second;
+            }
+            i--;
+        }
+    }
+
+    // branch rooms
+    for (int b = 0; b < 2; b++)
+    {
+        int idx = std::rand() % (int)path.size();
+        int bx = path[idx].first, by = path[idx].second;
+        int dir = std::rand() % 4;
+        int nx = bx + dx[dir], ny = by + dy[dir];
+        if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE)
+        {
+            bool exists = false;
+            for (auto& p : path)
+                if (p.first == nx && p.second == ny) { exists = true; break; }
+            if (!exists)
+            {
+                rooms[bx][by].setDoor(dir, true);
+                rooms[nx][ny].setDoor((dir + 2) % 4, true);
+                rooms[nx][ny].gridX = nx;
+                rooms[nx][ny].gridY = ny;
+                rooms[nx][ny].generate(currentFloor, false);
+                path.push_back({nx, ny});
+            }
+        }
+    }
+
+    rooms[startX][startY].markVisited();
+    player.reset(400.f, 300.f);
+}
+
+Room& Game::currentRoom()
+{
+    return rooms[currentRoomX][currentRoomY];
 }
 
 void Game::handleEvent(const sf::Event& event)
@@ -48,6 +145,17 @@ void Game::handleEvent(const sf::Event& event)
         break;
 
     case GameState::Playing:
+        if (choosingBuff)
+        {
+            if (event.key.code == sf::Keyboard::Num1 && buffChoices.size() > 0)
+            { applyBuff(buffChoices[0]); choosingBuff = false; nextFloor(); }
+            else if (event.key.code == sf::Keyboard::Num2 && buffChoices.size() > 1)
+            { applyBuff(buffChoices[1]); choosingBuff = false; nextFloor(); }
+            else if (event.key.code == sf::Keyboard::Num3 && buffChoices.size() > 2)
+            { applyBuff(buffChoices[2]); choosingBuff = false; nextFloor(); }
+            return;
+        }
+
         if (event.key.code == sf::Keyboard::Num1)
             player.transform(Form::Circle);
         else if (event.key.code == sf::Keyboard::Num2)
@@ -57,7 +165,6 @@ void Game::handleEvent(const sf::Event& event)
         else if (event.key.code == sf::Keyboard::Space)
             player.useAbility();
 
-        // spawn transform particles
         if (player.justTransformed())
         {
             sf::Color c;
@@ -78,12 +185,14 @@ void Game::handleEvent(const sf::Event& event)
             restart();
         }
         break;
+
+    case GameState::BossIntro:
+        break;
     }
 }
 
 void Game::update(float dt)
 {
-    // screen shake decay
     if (shakeTimer > 0.f)
     {
         shakeTimer -= dt;
@@ -92,16 +201,28 @@ void Game::update(float dt)
         shakeOffset.y = ((float)(std::rand() % 100) / 100.f - 0.5f) * shakeIntensity * t * 2.f;
     }
     else
-    {
         shakeOffset = sf::Vector2f(0.f, 0.f);
+
+    if (state == GameState::BossIntro)
+    {
+        bossIntroTimer -= dt;
+        if (bossIntroTimer <= 0.f)
+            state = GameState::Playing;
+        return;
     }
 
-    if (state != GameState::Playing)
+    if (state != GameState::Playing || choosingBuff)
         return;
 
+    if (transitionTimer > 0.f)
+    {
+        transitionTimer -= dt;
+        return;
+    }
+
+    playTime += dt;
     player.handleInput(dt);
 
-    // triangle form aims toward mouse cursor
     if (player.getForm() == Form::Triangle)
     {
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
@@ -120,45 +241,11 @@ void Game::update(float dt)
         projectiles.emplace_back(pos, vel, 4.f, 20.f, true, sf::Color(255, 200, 60));
     }
 
-    // wave spawning
-    if (enemies.empty() && waveAnnounceTimer <= 0.f)
-    {
-        waveTimer -= dt;
-        if (waveTimer <= 0.f)
-        {
-            spawnWave();
-            waveTimer = waveDelay;
-        }
-    }
+    currentRoom().update(dt, player.getPosition(), projectiles);
 
-    if (waveAnnounceTimer > 0.f)
-        waveAnnounceTimer -= dt;
-
-    for (auto& enemy : enemies)
-        enemy.update(dt, player.getPosition(), projectiles);
-
-    // push enemies apart so they don't stack on top of each other
-    for (size_t i = 0; i < enemies.size(); i++)
-    {
-        for (size_t j = i + 1; j < enemies.size(); j++)
-        {
-            if (!enemies[i].isAlive() || !enemies[j].isAlive()) continue;
-            float minDist = enemies[i].getRadius() + enemies[j].getRadius();
-            float d = dist(enemies[i].getPosition(), enemies[j].getPosition());
-            if (d < minDist && d > 0.1f)
-            {
-                float push = (minDist - d) * 0.5f;
-                enemies[i].pushAway(enemies[j].getPosition(), push);
-                enemies[j].pushAway(enemies[i].getPosition(), push);
-            }
-        }
-    }
-
-    // update projectiles
     for (auto& proj : projectiles)
         proj.update(dt);
 
-    // update particles
     for (auto& p : particles)
         p.update(dt);
 
@@ -170,14 +257,15 @@ void Game::update(float dt)
 
     checkCollisions();
 
-    // remove dead enemies, spawn death particles, maybe drop health
+    auto& enemies = currentRoom().getEnemies();
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive())
         {
             spawnDeathParticles(enemy.getPosition(), enemy.getType());
+            totalKills++;
 
-            int points = 10;
+            int points = enemy.isBoss() ? 100 : 10;
             if (isEffectiveForm(player.getForm(), enemy.getType()))
             {
                 points *= 2;
@@ -186,9 +274,14 @@ void Game::update(float dt)
             }
             score += points * scoreMultiplier;
 
-            // 25% chance to drop health
-            if (std::rand() % 100 < 25)
+            if (!enemy.isBoss() && std::rand() % 100 < 25)
                 pickups.emplace_back(enemy.getPosition(), 15);
+
+            if (enemy.isBoss())
+            {
+                pickups.emplace_back(enemy.getPosition(), 50);
+                bossAlive = false;
+            }
         }
     }
 
@@ -212,7 +305,6 @@ void Game::update(float dt)
         std::remove_if(dmgNumbers.begin(), dmgNumbers.end(), [](const DamageNumber& d) { return !d.isAlive(); }),
         dmgNumbers.end());
 
-    // multiplier decay
     if (multiplierTimer > 0.f)
     {
         multiplierTimer -= dt;
@@ -223,6 +315,23 @@ void Game::update(float dt)
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
 
+    // boss room cleared -> buff choice or win
+    if (currentRoom().isBossRoom() && currentRoom().isCleared() && !choosingBuff && !bossAlive)
+    {
+        if (currentFloor >= totalFloors)
+        {
+            state = GameState::GameOver;
+            score += 1000 * currentFloor;
+        }
+        else
+        {
+            generateBuffChoices();
+            choosingBuff = true;
+        }
+    }
+
+    checkDoorTransition();
+
     if (!player.isAlive())
     {
         state = GameState::GameOver;
@@ -231,96 +340,74 @@ void Game::update(float dt)
     }
 }
 
-void Game::draw()
+void Game::checkDoorTransition()
 {
-    window.clear(sf::Color(18, 18, 28));
+    if (!currentRoom().isCleared()) return;
 
-    // apply screen shake via view offset
-    sf::View view = window.getDefaultView();
-    view.move(shakeOffset);
-    window.setView(view);
+    sf::Vector2f pp = player.getPosition();
+    float pr = player.getRadius();
+    int dir = -1;
 
-    drawBackground();
+    if (pp.y - pr <= 2.f && currentRoom().doorOpen(0) && std::abs(pp.x - 400.f) < 50.f)
+        dir = 0;
+    else if (pp.x + pr >= 798.f && currentRoom().doorOpen(1) && std::abs(pp.y - 300.f) < 50.f)
+        dir = 1;
+    else if (pp.y + pr >= 598.f && currentRoom().doorOpen(2) && std::abs(pp.x - 400.f) < 50.f)
+        dir = 2;
+    else if (pp.x - pr <= 2.f && currentRoom().doorOpen(3) && std::abs(pp.y - 300.f) < 50.f)
+        dir = 3;
 
-    for (auto& hp : pickups)
-        hp.draw(window);
-
-    for (auto& p : particles)
-        p.draw(window);
-
-    for (auto& enemy : enemies)
-        enemy.draw(window);
-
-    for (auto& proj : projectiles)
-        proj.draw(window);
-
-    player.draw(window);
-
-    if (fontLoaded)
-    {
-        for (auto& dn : dmgNumbers)
-            dn.draw(window, font);
-    }
-
-    // reset view for HUD (HUD shouldn't shake)
-    window.setView(window.getDefaultView());
-
-    drawHUD();
-
-    if (waveAnnounceTimer > 0.f)
-        drawWaveAnnounce();
-
-    if (state == GameState::Title)
-        drawTitle();
-    else if (state == GameState::GameOver)
-        drawGameOver();
+    if (dir >= 0)
+        transitionToRoom(dir);
 }
 
-void Game::spawnWave()
+void Game::transitionToRoom(int dir)
 {
-    wave++;
-    waveAnnounceTimer = 1.5f;
-    waveAnnounceNum = wave;
+    int dx[] = {0, 1, 0, -1};
+    int dy[] = {-1, 0, 1, 0};
 
-    int count = enemiesPerWave + (wave - 1) * 2;
+    int nx = currentRoomX + dx[dir];
+    int ny = currentRoomY + dy[dir];
+    if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) return;
 
-    for (int i = 0; i < count; i++)
+    currentRoomX = nx;
+    currentRoomY = ny;
+
+    projectiles.clear();
+    particles.clear();
+    pickups.clear();
+    dmgNumbers.clear();
+
+    float px = 400.f, py = 300.f;
+    switch (dir)
     {
-        sf::Vector2f pos = randomEdgePos();
-        EnemyType type;
-        int roll = std::rand() % 100;
-
-        if (wave <= 2)
-        {
-            type = EnemyType::Chaser;
-        }
-        else if (wave <= 4)
-        {
-            type = (roll < 60) ? EnemyType::Chaser : EnemyType::Shooter;
-        }
-        else if (wave <= 6)
-        {
-            if (roll < 40) type = EnemyType::Chaser;
-            else if (roll < 70) type = EnemyType::Shooter;
-            else type = EnemyType::Brute;
-        }
-        else
-        {
-            if (roll < 35) type = EnemyType::Chaser;
-            else if (roll < 60) type = EnemyType::Shooter;
-            else type = EnemyType::Brute;
-        }
-
-        enemies.emplace_back(pos.x, pos.y, type);
+    case 0: py = 560.f; break;
+    case 1: px = 40.f;  break;
+    case 2: py = 40.f;  break;
+    case 3: px = 760.f; break;
     }
+    player.setPosition(px, py);
+
+    bool wasVisited = currentRoom().isVisited();
+    currentRoom().markVisited();
+
+    if (currentRoom().isBossRoom() && !wasVisited)
+    {
+        bossAlive = true;
+        state = GameState::BossIntro;
+        bossIntroTimer = 1.5f;
+    }
+
+    transitionTimer = 0.3f;
+    transitionDir = dir;
 }
 
 void Game::checkCollisions()
 {
     sf::Vector2f pp = player.getPosition();
     float pr = player.getRadius();
+    auto& enemies = currentRoom().getEnemies();
 
-    // player dash damages enemies it passes through
     if (player.isDashing())
     {
         for (auto& enemy : enemies)
@@ -353,11 +440,9 @@ void Game::checkCollisions()
         addScreenShake(6.f, 0.2f);
     }
 
-    // player projectiles hit enemies
     for (auto& proj : projectiles)
     {
         if (!proj.fromPlayer || !proj.isAlive()) continue;
-
         for (auto& enemy : enemies)
         {
             if (!enemy.isAlive()) continue;
@@ -372,33 +457,36 @@ void Game::checkCollisions()
         }
     }
 
-    // enemy projectiles hit player
     for (auto& proj : projectiles)
     {
         if (proj.fromPlayer || !proj.isAlive()) continue;
-
         if (dist(proj.position, pp) < proj.radius + pr)
         {
-            player.takeDamage((int)proj.damage);
+            if (!player.isInvincible())
+            {
+                player.takeDamage((int)proj.damage);
+                addScreenShake(4.f, 0.15f);
+            }
             proj.lifetime = 0.f;
-            addScreenShake(4.f, 0.15f);
             spawnParticles(proj.position, sf::Color(255, 80, 80), 5, 100.f, 3.f);
         }
     }
 
-    // enemy contact damage
-    for (auto& enemy : enemies)
+    if (!player.isInvincible() && damageCooldown <= 0.f)
     {
-        if (!enemy.isAlive()) continue;
-        if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() && damageCooldown <= 0.f)
+        for (auto& enemy : enemies)
         {
-            player.takeDamage(enemy.getContactDamage());
-            damageCooldown = 0.4f;
-            addScreenShake(3.f, 0.1f);
+            if (!enemy.isAlive()) continue;
+            if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius())
+            {
+                player.takeDamage(enemy.getContactDamage());
+                damageCooldown = 0.4f;
+                addScreenShake(3.f, 0.1f);
+                break;
+            }
         }
     }
 
-    // health pickup collection
     for (auto& hp : pickups)
     {
         if (!hp.isAlive()) continue;
@@ -409,6 +497,629 @@ void Game::checkCollisions()
             spawnParticles(hp.position, sf::Color(80, 255, 80), 8, 100.f, 3.f);
         }
     }
+}
+
+void Game::draw()
+{
+    window.clear(sf::Color(18, 18, 28));
+
+    sf::View view = window.getDefaultView();
+    view.move(shakeOffset);
+    window.setView(view);
+
+    drawBackground();
+    currentRoom().drawDoors(window);
+
+    for (auto& hp : pickups)
+        hp.draw(window);
+
+    for (auto& p : particles)
+        p.draw(window);
+
+    currentRoom().draw(window);
+
+    for (auto& proj : projectiles)
+        proj.draw(window);
+
+    player.draw(window);
+
+    if (fontLoaded)
+    {
+        for (auto& dn : dmgNumbers)
+            dn.draw(window, font);
+    }
+
+    window.setView(window.getDefaultView());
+
+    drawHUD();
+    drawMinimap();
+
+    if (bossAlive)
+        drawBossBar();
+
+    if (state == GameState::Title)
+        drawTitle();
+    else if (state == GameState::GameOver)
+        drawGameOver();
+    else if (state == GameState::BossIntro && fontLoaded)
+    {
+        sf::Text txt;
+        txt.setFont(font);
+        txt.setCharacterSize(40);
+        txt.setFillColor(sf::Color(220, 40, 40));
+        txt.setString("BOSS ROOM");
+        sf::FloatRect b = txt.getLocalBounds();
+        txt.setPosition(400.f - b.width / 2.f, 250.f);
+        window.draw(txt);
+    }
+
+    if (choosingBuff)
+        drawBuffChoice();
+
+    if (transitionTimer > 0.f)
+        drawRoomTransition();
+}
+
+void Game::drawBackground()
+{
+    float spacing = 40.f;
+    for (float x = spacing; x < 800.f; x += spacing)
+    {
+        for (float y = spacing; y < 600.f; y += spacing)
+        {
+            sf::CircleShape dot(1.2f);
+            dot.setOrigin(1.2f, 1.2f);
+            dot.setPosition(x, y);
+            dot.setFillColor(sf::Color(40, 40, 55));
+            window.draw(dot);
+        }
+    }
+
+    sf::RectangleShape border(sf::Vector2f(790.f, 590.f));
+    border.setPosition(5.f, 5.f);
+    border.setFillColor(sf::Color::Transparent);
+    border.setOutlineColor(sf::Color(50, 50, 70));
+    border.setOutlineThickness(2.f);
+    window.draw(border);
+}
+
+void Game::drawMinimap()
+{
+    if (!fontLoaded) return;
+
+    float cellSize = 12.f;
+    float padding = 2.f;
+    float startX = 800.f - (MAP_SIZE * (cellSize + padding)) - 15.f;
+    float startY = 80.f;
+
+    sf::Text label;
+    label.setFont(font);
+    label.setCharacterSize(10);
+    label.setFillColor(sf::Color(120, 120, 140));
+    label.setString("MAP");
+    label.setPosition(startX, startY - 14.f);
+    window.draw(label);
+
+    for (int x = 0; x < MAP_SIZE; x++)
+    {
+        for (int y = 0; y < MAP_SIZE; y++)
+        {
+            Room& r = rooms[x][y];
+            bool hasRoom = false;
+            for (int d = 0; d < 4; d++)
+                if (r.hasDoor(d)) { hasRoom = true; break; }
+            if (x == 2 && y == 2) hasRoom = true;
+            if (!hasRoom && !r.isVisited()) continue;
+
+            sf::RectangleShape cell(sf::Vector2f(cellSize, cellSize));
+            cell.setPosition(startX + x * (cellSize + padding), startY + y * (cellSize + padding));
+
+            if (x == currentRoomX && y == currentRoomY)
+                cell.setFillColor(sf::Color(255, 255, 255));
+            else if (r.isBossRoom() && r.isVisited())
+                cell.setFillColor(sf::Color(220, 40, 40));
+            else if (r.isCleared())
+                cell.setFillColor(sf::Color(60, 120, 60));
+            else if (r.isVisited())
+                cell.setFillColor(sf::Color(100, 100, 140));
+            else if (hasRoom)
+                cell.setFillColor(sf::Color(40, 40, 55));
+            else
+                continue;
+
+            cell.setOutlineColor(sf::Color(80, 80, 100));
+            cell.setOutlineThickness(1.f);
+            window.draw(cell);
+        }
+    }
+}
+
+void Game::drawBossBar()
+{
+    if (!fontLoaded) return;
+
+    auto& enemies = currentRoom().getEnemies();
+    float totalHp = 0.f, totalMaxHp = 0.f;
+    for (auto& e : enemies)
+    {
+        if (e.isBoss() && e.isAlive())
+        {
+            totalHp += e.getHealth();
+            totalMaxHp += e.getMaxHealth();
+        }
+    }
+    if (totalMaxHp <= 0.f) return;
+
+    float barW = 400.f, barH = 12.f;
+    float barX = 200.f, barY = 580.f;
+    float pct = totalHp / totalMaxHp;
+
+    sf::RectangleShape bg(sf::Vector2f(barW, barH));
+    bg.setPosition(barX, barY);
+    bg.setFillColor(sf::Color(40, 20, 20));
+    window.draw(bg);
+
+    sf::RectangleShape bar(sf::Vector2f(barW * pct, barH));
+    bar.setPosition(barX, barY);
+    bar.setFillColor(sf::Color(200, 30, 30));
+    window.draw(bar);
+
+    sf::RectangleShape border(sf::Vector2f(barW, barH));
+    border.setPosition(barX, barY);
+    border.setFillColor(sf::Color::Transparent);
+    border.setOutlineColor(sf::Color(200, 200, 200));
+    border.setOutlineThickness(1.f);
+    window.draw(border);
+
+    sf::Text label;
+    label.setFont(font);
+    label.setCharacterSize(12);
+    label.setFillColor(sf::Color(220, 40, 40));
+    label.setString("FLOOR " + std::to_string(currentFloor) + " BOSS");
+    sf::FloatRect lb = label.getLocalBounds();
+    label.setPosition(400.f - lb.width / 2.f, barY - 16.f);
+    window.draw(label);
+}
+
+void Game::drawHUD()
+{
+    if (!fontLoaded) return;
+
+    float barW = 200.f, barH = 14.f;
+    float hp = (float)player.getHealth() / player.getMaxHealth();
+
+    sf::RectangleShape hpBg(sf::Vector2f(barW, barH));
+    hpBg.setPosition(15.f, 15.f);
+    hpBg.setFillColor(sf::Color(40, 40, 40));
+    window.draw(hpBg);
+
+    sf::RectangleShape hpBar(sf::Vector2f(barW * hp, barH));
+    hpBar.setPosition(15.f, 15.f);
+    sf::Color hpCol((sf::Uint8)(255 * (1.f - hp)), (sf::Uint8)(200 * hp), 50);
+    hpBar.setFillColor(hpCol);
+    window.draw(hpBar);
+
+    sf::RectangleShape hpBorder(sf::Vector2f(barW, barH));
+    hpBorder.setPosition(15.f, 15.f);
+    hpBorder.setFillColor(sf::Color::Transparent);
+    hpBorder.setOutlineColor(sf::Color(200, 200, 200));
+    hpBorder.setOutlineThickness(1.f);
+    window.draw(hpBorder);
+
+    sf::Text scoreTxt;
+    scoreTxt.setFont(font);
+    scoreTxt.setCharacterSize(18);
+    scoreTxt.setFillColor(sf::Color::White);
+    std::string scoreStr = "Score: " + std::to_string(score);
+    if (scoreMultiplier > 1)
+        scoreStr += "  x" + std::to_string(scoreMultiplier);
+    scoreTxt.setString(scoreStr);
+    scoreTxt.setPosition(15.f, 36.f);
+    window.draw(scoreTxt);
+
+    sf::Text floorTxt;
+    floorTxt.setFont(font);
+    floorTxt.setCharacterSize(16);
+    floorTxt.setFillColor(sf::Color(180, 180, 200));
+    floorTxt.setString("Floor " + std::to_string(currentFloor) + "/" + std::to_string(totalFloors));
+    floorTxt.setPosition(15.f, 58.f);
+    window.draw(floorTxt);
+
+    std::string formName;
+    std::string abilityDesc;
+    sf::Color formColor;
+    switch (player.getForm())
+    {
+    case Form::Circle:
+        formName = "[1] CIRCLE";
+        abilityDesc = "Space: Dash";
+        formColor = sf::Color(80, 180, 255);
+        break;
+    case Form::Triangle:
+        formName = "[2] TRIANGLE";
+        abilityDesc = "Space: Shoot (mouse aim)";
+        formColor = sf::Color(255, 160, 40);
+        break;
+    case Form::Square:
+        formName = "[3] SQUARE";
+        abilityDesc = "Space: Slam";
+        formColor = sf::Color(80, 210, 80);
+        break;
+    }
+
+    sf::Text formTxt;
+    formTxt.setFont(font);
+    formTxt.setCharacterSize(17);
+    formTxt.setFillColor(formColor);
+    formTxt.setString(formName);
+    formTxt.setPosition(660.f, 15.f);
+    window.draw(formTxt);
+
+    sf::Text abilTxt;
+    abilTxt.setFont(font);
+    abilTxt.setCharacterSize(13);
+    abilTxt.setFillColor(sf::Color(180, 180, 180));
+    abilTxt.setString(abilityDesc);
+    abilTxt.setPosition(660.f, 36.f);
+    window.draw(abilTxt);
+
+    float cdBarW = 80.f, cdBarH = 4.f;
+    float cdPct = player.getCooldownPercent();
+    sf::RectangleShape cdBg(sf::Vector2f(cdBarW, cdBarH));
+    cdBg.setPosition(660.f, 55.f);
+    cdBg.setFillColor(sf::Color(40, 40, 40));
+    window.draw(cdBg);
+    sf::RectangleShape cdBar(sf::Vector2f(cdBarW * cdPct, cdBarH));
+    cdBar.setPosition(660.f, 55.f);
+    cdBar.setFillColor(cdPct >= 1.f ? sf::Color(255, 255, 255) : formColor);
+    window.draw(cdBar);
+
+    // buff icons
+    float buffStartY = 580.f;
+    for (size_t i = 0; i < ownedBuffs.size() && i < 3; i++)
+    {
+        sf::RectangleShape bg(sf::Vector2f(18.f, 18.f));
+        bg.setPosition(15.f + i * 22.f, buffStartY);
+        bg.setFillColor(sf::Color(60, 60, 100));
+        bg.setOutlineColor(sf::Color(120, 120, 180));
+        bg.setOutlineThickness(1.f);
+        window.draw(bg);
+
+        sf::Text t;
+        t.setFont(font);
+        t.setCharacterSize(9);
+        t.setFillColor(sf::Color(200, 200, 255));
+        t.setString(ownedBuffs[i].name.substr(0, 3));
+        t.setPosition(16.f + i * 22.f, buffStartY + 3.f);
+        window.draw(t);
+    }
+}
+
+void Game::drawTitle()
+{
+    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    window.draw(overlay);
+
+    if (!fontLoaded) return;
+
+    sf::Text title;
+    title.setFont(font);
+    title.setCharacterSize(52);
+    title.setFillColor(sf::Color::White);
+    title.setString("TRANSFORM ARENA");
+    sf::FloatRect b = title.getLocalBounds();
+    title.setPosition(400.f - b.width / 2.f, 100.f);
+    window.draw(title);
+
+    sf::Text sub;
+    sub.setFont(font);
+    sub.setCharacterSize(16);
+    sub.setFillColor(sf::Color(180, 180, 200));
+    sub.setString("Clear rooms, defeat bosses, collect buffs across 3 floors");
+    b = sub.getLocalBounds();
+    sub.setPosition(400.f - b.width / 2.f, 170.f);
+    window.draw(sub);
+
+    float yStart = 220.f;
+    const char* descs[] = {
+        "[1] CIRCLE  -  Fast. Dash through enemies.",
+        "[2] TRIANGLE  -  Ranged. Aim with mouse.",
+        "[3] SQUARE  -  Tank. Ground pound slam."
+    };
+    sf::Color colors[] = {
+        sf::Color(80, 180, 255),
+        sf::Color(255, 160, 40),
+        sf::Color(80, 210, 80)
+    };
+
+    for (int i = 0; i < 3; i++)
+    {
+        sf::Text desc;
+        desc.setFont(font);
+        desc.setCharacterSize(15);
+        desc.setFillColor(colors[i]);
+        desc.setString(descs[i]);
+        b = desc.getLocalBounds();
+        desc.setPosition(400.f - b.width / 2.f, yStart + i * 28.f);
+        window.draw(desc);
+    }
+
+    sf::Text controls;
+    controls.setFont(font);
+    controls.setCharacterSize(13);
+    controls.setFillColor(sf::Color(120, 120, 140));
+    controls.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  Mouse: Aim (Triangle)");
+    b = controls.getLocalBounds();
+    controls.setPosition(400.f - b.width / 2.f, 340.f);
+    window.draw(controls);
+
+    sf::Text start;
+    start.setFont(font);
+    start.setCharacterSize(20);
+    float pulse = (std::sin((float)std::clock() / 300.f) + 1.f) / 2.f;
+    start.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(120 + 135 * pulse)));
+    start.setString("Press ENTER or SPACE to start");
+    b = start.getLocalBounds();
+    start.setPosition(400.f - b.width / 2.f, 400.f);
+    window.draw(start);
+}
+
+void Game::drawGameOver()
+{
+    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    window.draw(overlay);
+
+    if (!fontLoaded) return;
+
+    bool won = (currentFloor >= totalFloors && currentRoom().isBossRoom() && currentRoom().isCleared());
+
+    sf::Text goText;
+    goText.setFont(font);
+    goText.setCharacterSize(48);
+    goText.setFillColor(won ? sf::Color(80, 255, 80) : sf::Color(220, 40, 40));
+    goText.setString(won ? "YOU WIN!" : "GAME OVER");
+    sf::FloatRect b = goText.getLocalBounds();
+    goText.setPosition(400.f - b.width / 2.f, 120.f);
+    window.draw(goText);
+
+    sf::Text scoreTxt;
+    scoreTxt.setFont(font);
+    scoreTxt.setCharacterSize(22);
+    scoreTxt.setFillColor(sf::Color::White);
+    scoreTxt.setString("Score: " + std::to_string(score));
+    b = scoreTxt.getLocalBounds();
+    scoreTxt.setPosition(400.f - b.width / 2.f, 195.f);
+    window.draw(scoreTxt);
+
+    int minutes = (int)playTime / 60;
+    int seconds = (int)playTime % 60;
+
+    std::string lines[] = {
+        "Floor reached: " + std::to_string(currentFloor) + "/" + std::to_string(totalFloors),
+        "Enemies killed: " + std::to_string(totalKills),
+        "Time played: " + std::to_string(minutes) + "m " + std::to_string(seconds) + "s",
+        "Buffs collected: " + std::to_string((int)ownedBuffs.size())
+    };
+
+    float statY = 235.f;
+    for (int i = 0; i < 4; i++)
+    {
+        sf::Text t;
+        t.setFont(font);
+        t.setCharacterSize(16);
+        t.setFillColor(sf::Color(180, 180, 200));
+        t.setString(lines[i]);
+        b = t.getLocalBounds();
+        t.setPosition(400.f - b.width / 2.f, statY);
+        window.draw(t);
+        statY += 24.f;
+    }
+
+    sf::Text restartTxt;
+    restartTxt.setFont(font);
+    restartTxt.setCharacterSize(18);
+    restartTxt.setFillColor(sf::Color(180, 180, 180));
+    restartTxt.setString("Press R to restart");
+    b = restartTxt.getLocalBounds();
+    restartTxt.setPosition(400.f - b.width / 2.f, 380.f);
+    window.draw(restartTxt);
+}
+
+void Game::drawBuffChoice()
+{
+    if (!fontLoaded) return;
+
+    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+    overlay.setFillColor(sf::Color(0, 0, 0, 160));
+    window.draw(overlay);
+
+    sf::Text title;
+    title.setFont(font);
+    title.setCharacterSize(32);
+    title.setFillColor(sf::Color(255, 220, 80));
+    title.setString("CHOOSE A BUFF");
+    sf::FloatRect b = title.getLocalBounds();
+    title.setPosition(400.f - b.width / 2.f, 80.f);
+    window.draw(title);
+
+    if (ownedBuffs.size() >= 3)
+    {
+        sf::Text full;
+        full.setFont(font);
+        full.setCharacterSize(14);
+        full.setFillColor(sf::Color(255, 100, 100));
+        full.setString("(Max 3 buffs - new buff replaces oldest)");
+        b = full.getLocalBounds();
+        full.setPosition(400.f - b.width / 2.f, 120.f);
+        window.draw(full);
+    }
+
+    for (size_t i = 0; i < buffChoices.size(); i++)
+    {
+        float cardX = 120.f + i * 220.f;
+        float cardY = 170.f;
+        float cardW = 180.f, cardH = 260.f;
+
+        sf::RectangleShape card(sf::Vector2f(cardW, cardH));
+        card.setPosition(cardX, cardY);
+        card.setFillColor(sf::Color(30, 30, 50));
+        card.setOutlineColor(sf::Color(120, 120, 180));
+        card.setOutlineThickness(2.f);
+        window.draw(card);
+
+        sf::Text numTxt;
+        numTxt.setFont(font);
+        numTxt.setCharacterSize(28);
+        numTxt.setFillColor(sf::Color(255, 220, 80));
+        numTxt.setString("[" + std::to_string(i + 1) + "]");
+        b = numTxt.getLocalBounds();
+        numTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 15.f);
+        window.draw(numTxt);
+
+        sf::Text nameTxt;
+        nameTxt.setFont(font);
+        nameTxt.setCharacterSize(16);
+        nameTxt.setFillColor(sf::Color::White);
+        nameTxt.setString(buffChoices[i].name);
+        b = nameTxt.getLocalBounds();
+        nameTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 70.f);
+        window.draw(nameTxt);
+
+        sf::Text descTxt;
+        descTxt.setFont(font);
+        descTxt.setCharacterSize(12);
+        descTxt.setFillColor(sf::Color(160, 160, 180));
+        descTxt.setString(buffChoices[i].desc);
+        b = descTxt.getLocalBounds();
+        descTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 110.f);
+        window.draw(descTxt);
+    }
+}
+
+void Game::drawRoomTransition()
+{
+    float t = transitionTimer / 0.3f;
+    sf::RectangleShape fade(sf::Vector2f(800.f, 600.f));
+    fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(180 * t)));
+    window.draw(fade);
+}
+
+void Game::restart()
+{
+    player.reset(400.f, 300.f);
+    projectiles.clear();
+    particles.clear();
+    pickups.clear();
+    dmgNumbers.clear();
+    ownedBuffs.clear();
+    buffChoices.clear();
+    choosingBuff = false;
+    score = 0;
+    scoreMultiplier = 1;
+    multiplierTimer = 0.f;
+    damageCooldown = 0.f;
+    totalKills = 0;
+    playTime = 0.f;
+    currentFloor = 1;
+    shakeIntensity = 0.f;
+    shakeTimer = 0.f;
+    shakeOffset = sf::Vector2f(0.f, 0.f);
+    transitionTimer = 0.f;
+    bossAlive = false;
+
+    generateFloor();
+}
+
+void Game::nextFloor()
+{
+    currentFloor++;
+    projectiles.clear();
+    particles.clear();
+    pickups.clear();
+    dmgNumbers.clear();
+    bossAlive = false;
+    generateFloor();
+}
+
+Buff Game::randomBuff()
+{
+    Buff b;
+    b.speedBonus = 0.f;
+    b.damageBonus = 0.f;
+    b.healthBonus = 0;
+    b.cooldownReduction = 0.f;
+
+    int type = std::rand() % 6;
+    switch (type)
+    {
+    case 0:
+        b.name = "Swift Feet";
+        b.desc = "+15% move speed";
+        b.id = 0;
+        b.speedBonus = 0.15f;
+        break;
+    case 1:
+        b.name = "Sharp Edge";
+        b.desc = "+20% damage";
+        b.id = 1;
+        b.damageBonus = 0.2f;
+        break;
+    case 2:
+        b.name = "Iron Skin";
+        b.desc = "+30 max health";
+        b.id = 2;
+        b.healthBonus = 30;
+        break;
+    case 3:
+        b.name = "Quick Hands";
+        b.desc = "-25% cooldowns";
+        b.id = 3;
+        b.cooldownReduction = 0.25f;
+        break;
+    case 4:
+        b.name = "Glass Cannon";
+        b.desc = "+40% dmg, -20 hp";
+        b.id = 4;
+        b.damageBonus = 0.4f;
+        b.healthBonus = -20;
+        break;
+    case 5:
+        b.name = "Vitality";
+        b.desc = "+50 max health";
+        b.id = 5;
+        b.healthBonus = 50;
+        break;
+    }
+    return b;
+}
+
+void Game::generateBuffChoices()
+{
+    buffChoices.clear();
+    for (int i = 0; i < 3; i++)
+    {
+        Buff b = randomBuff();
+        bool dup = false;
+        for (auto& existing : buffChoices)
+            if (existing.id == b.id) { dup = true; break; }
+        if (dup) { i--; continue; }
+        buffChoices.push_back(b);
+    }
+}
+
+void Game::applyBuff(const Buff& buff)
+{
+    if (ownedBuffs.size() >= 3)
+        ownedBuffs.erase(ownedBuffs.begin());
+
+    ownedBuffs.push_back(buff);
+
+    if (buff.healthBonus > 0)
+        player.heal(buff.healthBonus);
+    if (buff.healthBonus < 0)
+        player.takeDamage(-buff.healthBonus);
 }
 
 void Game::spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float sz)
@@ -445,279 +1156,8 @@ void Game::addScreenShake(float intensity, float duration)
     }
 }
 
-void Game::drawBackground()
-{
-    // subtle dot grid
-    float spacing = 40.f;
-    for (float x = spacing; x < 800.f; x += spacing)
-    {
-        for (float y = spacing; y < 600.f; y += spacing)
-        {
-            sf::CircleShape dot(1.2f);
-            dot.setOrigin(1.2f, 1.2f);
-            dot.setPosition(x, y);
-            dot.setFillColor(sf::Color(40, 40, 55));
-            window.draw(dot);
-        }
-    }
-
-    // arena border
-    sf::RectangleShape border(sf::Vector2f(790.f, 590.f));
-    border.setPosition(5.f, 5.f);
-    border.setFillColor(sf::Color::Transparent);
-    border.setOutlineColor(sf::Color(50, 50, 70));
-    border.setOutlineThickness(2.f);
-    window.draw(border);
-}
-
-void Game::drawHUD()
-{
-    if (!fontLoaded) return;
-
-    // health bar
-    float barW = 200.f, barH = 14.f;
-    float hp = (float)player.getHealth() / player.getMaxHealth();
-
-    sf::RectangleShape hpBg(sf::Vector2f(barW, barH));
-    hpBg.setPosition(15.f, 15.f);
-    hpBg.setFillColor(sf::Color(40, 40, 40));
-    window.draw(hpBg);
-
-    sf::RectangleShape hpBar(sf::Vector2f(barW * hp, barH));
-    hpBar.setPosition(15.f, 15.f);
-    sf::Color hpCol((sf::Uint8)(255 * (1.f - hp)), (sf::Uint8)(200 * hp), 50);
-    hpBar.setFillColor(hpCol);
-    window.draw(hpBar);
-
-    sf::RectangleShape hpBorder(sf::Vector2f(barW, barH));
-    hpBorder.setPosition(15.f, 15.f);
-    hpBorder.setFillColor(sf::Color::Transparent);
-    hpBorder.setOutlineColor(sf::Color(200, 200, 200));
-    hpBorder.setOutlineThickness(1.f);
-    window.draw(hpBorder);
-
-    // score
-    sf::Text scoreTxt;
-    scoreTxt.setFont(font);
-    scoreTxt.setCharacterSize(18);
-    scoreTxt.setFillColor(sf::Color::White);
-    std::string scoreStr = "Score: " + std::to_string(score);
-    if (scoreMultiplier > 1)
-        scoreStr += "  x" + std::to_string(scoreMultiplier);
-    scoreTxt.setString(scoreStr);
-    scoreTxt.setPosition(15.f, 36.f);
-    window.draw(scoreTxt);
-
-    // wave
-    sf::Text waveTxt;
-    waveTxt.setFont(font);
-    waveTxt.setCharacterSize(16);
-    waveTxt.setFillColor(sf::Color(180, 180, 200));
-    waveTxt.setString("Wave " + std::to_string(wave));
-    waveTxt.setPosition(15.f, 58.f);
-    window.draw(waveTxt);
-
-    // form indicator with descriptions
-    std::string formName;
-    std::string abilityDesc;
-    sf::Color formColor;
-    switch (player.getForm())
-    {
-    case Form::Circle:
-        formName = "[1] CIRCLE";
-        abilityDesc = "Space: Dash";
-        formColor = sf::Color(80, 180, 255);
-        break;
-    case Form::Triangle:
-        formName = "[2] TRIANGLE";
-        abilityDesc = "Space: Shoot";
-        formColor = sf::Color(255, 160, 40);
-        break;
-    case Form::Square:
-        formName = "[3] SQUARE";
-        abilityDesc = "Space: Slam";
-        formColor = sf::Color(80, 210, 80);
-        break;
-    }
-
-    sf::Text formTxt;
-    formTxt.setFont(font);
-    formTxt.setCharacterSize(17);
-    formTxt.setFillColor(formColor);
-    formTxt.setString(formName);
-    formTxt.setPosition(660.f, 15.f);
-    window.draw(formTxt);
-
-    sf::Text abilTxt;
-    abilTxt.setFont(font);
-    abilTxt.setCharacterSize(13);
-    abilTxt.setFillColor(sf::Color(180, 180, 180));
-    abilTxt.setString(abilityDesc);
-    abilTxt.setPosition(660.f, 36.f);
-    window.draw(abilTxt);
-
-    // cooldown bar
-    float cdBarW = 80.f, cdBarH = 4.f;
-    float cdPct = player.getCooldownPercent();
-
-    sf::RectangleShape cdBg(sf::Vector2f(cdBarW, cdBarH));
-    cdBg.setPosition(660.f, 55.f);
-    cdBg.setFillColor(sf::Color(40, 40, 40));
-    window.draw(cdBg);
-
-    sf::RectangleShape cdBar(sf::Vector2f(cdBarW * cdPct, cdBarH));
-    cdBar.setPosition(660.f, 55.f);
-    cdBar.setFillColor(cdPct >= 1.f ? sf::Color(255, 255, 255) : formColor);
-    window.draw(cdBar);
-
-    // controls hint
-    sf::Text hint;
-    hint.setFont(font);
-    hint.setCharacterSize(12);
-    hint.setFillColor(sf::Color(80, 80, 100));
-    hint.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  Mouse: Aim (Triangle)  |  ESC: Quit");
-    hint.setPosition(80.f, 580.f);
-    window.draw(hint);
-}
-
-void Game::drawTitle()
-{
-    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-    overlay.setFillColor(sf::Color(0, 0, 0, 180));
-    window.draw(overlay);
-
-    if (!fontLoaded) return;
-
-    sf::Text title;
-    title.setFont(font);
-    title.setCharacterSize(52);
-    title.setFillColor(sf::Color::White);
-    title.setString("TRANSFORM ARENA");
-    sf::FloatRect b = title.getLocalBounds();
-    title.setPosition(400.f - b.width / 2.f, 160.f);
-    window.draw(title);
-
-    sf::Text sub;
-    sub.setFont(font);
-    sub.setCharacterSize(16);
-    sub.setFillColor(sf::Color(180, 180, 200));
-    sub.setString("Shift between forms to survive the arena");
-    b = sub.getLocalBounds();
-    sub.setPosition(400.f - b.width / 2.f, 230.f);
-    window.draw(sub);
-
-    // form descriptions
-    float yStart = 290.f;
-    const char* descs[] = {
-        "[1] CIRCLE  -  Fast. Dash through enemies.",
-        "[2] TRIANGLE  -  Ranged. Aim with mouse, shoot with Space.",
-        "[3] SQUARE  -  Tank. Ground pound slam."
-    };
-    sf::Color colors[] = {
-        sf::Color(80, 180, 255),
-        sf::Color(255, 160, 40),
-        sf::Color(80, 210, 80)
-    };
-
-    for (int i = 0; i < 3; i++)
-    {
-        sf::Text desc;
-        desc.setFont(font);
-        desc.setCharacterSize(15);
-        desc.setFillColor(colors[i]);
-        desc.setString(descs[i]);
-        b = desc.getLocalBounds();
-        desc.setPosition(400.f - b.width / 2.f, yStart + i * 28.f);
-        window.draw(desc);
-    }
-
-    sf::Text start;
-    start.setFont(font);
-    start.setCharacterSize(20);
-    // pulsing alpha
-    float pulse = (std::sin((float)std::clock() / 300.f) + 1.f) / 2.f;
-    start.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(120 + 135 * pulse)));
-    start.setString("Press ENTER or SPACE to start");
-    b = start.getLocalBounds();
-    start.setPosition(400.f - b.width / 2.f, 420.f);
-    window.draw(start);
-}
-
-void Game::drawGameOver()
-{
-    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-    overlay.setFillColor(sf::Color(0, 0, 0, 180));
-    window.draw(overlay);
-
-    if (!fontLoaded) return;
-
-    sf::Text goText;
-    goText.setFont(font);
-    goText.setCharacterSize(48);
-    goText.setFillColor(sf::Color(220, 40, 40));
-    goText.setString("GAME OVER");
-    sf::FloatRect b = goText.getLocalBounds();
-    goText.setPosition(400.f - b.width / 2.f, 200.f);
-    window.draw(goText);
-
-    sf::Text scoreTxt;
-    scoreTxt.setFont(font);
-    scoreTxt.setCharacterSize(24);
-    scoreTxt.setFillColor(sf::Color::White);
-    scoreTxt.setString("Score: " + std::to_string(score) + "   Wave: " + std::to_string(wave));
-    b = scoreTxt.getLocalBounds();
-    scoreTxt.setPosition(400.f - b.width / 2.f, 275.f);
-    window.draw(scoreTxt);
-
-    sf::Text restart;
-    restart.setFont(font);
-    restart.setCharacterSize(18);
-    restart.setFillColor(sf::Color(180, 180, 180));
-    restart.setString("Press R to restart");
-    b = restart.getLocalBounds();
-    restart.setPosition(400.f - b.width / 2.f, 330.f);
-    window.draw(restart);
-}
-
-void Game::drawWaveAnnounce()
-{
-    if (!fontLoaded) return;
-
-    float alpha = std::min(1.f, waveAnnounceTimer / 0.5f);
-    sf::Text txt;
-    txt.setFont(font);
-    txt.setCharacterSize(36);
-    txt.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(255 * alpha)));
-    txt.setString("WAVE " + std::to_string(waveAnnounceNum));
-    sf::FloatRect b = txt.getLocalBounds();
-    txt.setPosition(400.f - b.width / 2.f, 260.f);
-    window.draw(txt);
-}
-
-void Game::restart()
-{
-    player.reset(400.f, 300.f);
-    enemies.clear();
-    projectiles.clear();
-    particles.clear();
-    pickups.clear();
-    dmgNumbers.clear();
-    score = 0;
-    scoreMultiplier = 1;
-    multiplierTimer = 0.f;
-    wave = 0;
-    enemiesPerWave = 3;
-    waveTimer = 1.5f;
-    damageCooldown = 0.f;
-    shakeIntensity = 0.f;
-    shakeTimer = 0.f;
-    shakeOffset = sf::Vector2f(0.f, 0.f);
-    waveAnnounceTimer = 0.f;
-}
-
 bool Game::isEffectiveForm(Form form, EnemyType enemy)
 {
-    // circle dash vs chasers, triangle shoot vs shooters, square pound vs brutes
     if (form == Form::Circle && enemy == EnemyType::Chaser) return true;
     if (form == Form::Triangle && enemy == EnemyType::Shooter) return true;
     if (form == Form::Square && enemy == EnemyType::Brute) return true;
@@ -728,18 +1168,4 @@ float Game::dist(sf::Vector2f a, sf::Vector2f b)
 {
     float dx = a.x - b.x, dy = a.y - b.y;
     return std::sqrt(dx * dx + dy * dy);
-}
-
-sf::Vector2f Game::randomEdgePos()
-{
-    int side = std::rand() % 4;
-    float x, y;
-    switch (side)
-    {
-    case 0: x = (float)(std::rand() % 800); y = -30.f; break;
-    case 1: x = (float)(std::rand() % 800); y = 630.f; break;
-    case 2: x = -30.f; y = (float)(std::rand() % 600); break;
-    default: x = 830.f; y = (float)(std::rand() % 600); break;
-    }
-    return sf::Vector2f(x, y);
 }

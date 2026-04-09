@@ -8,14 +8,17 @@ enum class EnemyType { Chaser, Brute, Shooter };
 class Enemy
 {
 public:
-    Enemy(float x, float y, EnemyType type);
+    Enemy(float x, float y, EnemyType type, bool isBoss = false);
 
     void update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& projectiles);
     void draw(sf::RenderWindow& window);
 
     sf::Vector2f getPosition() const;
     float getRadius() const;
+    float getHealth() const;
+    float getMaxHealth() const;
     bool isAlive() const;
+    bool isBoss() const;
     int getContactDamage() const;
     EnemyType getType() const;
 
@@ -41,4 +44,5 @@ private:
     float shootTimer;
     float shootInterval;
     float preferredRange;
+    bool bossFlag;
 };
