@@ -487,6 +487,35 @@ void Game::update(float dt)
 
     checkCollisions();
 
+    // Hive boss minion spawning
+    {
+        auto& en = currentRoom().getEnemies();
+        for (auto& enemy : en)
+        {
+            if (!enemy.isAlive() || !enemy.isBoss() || enemy.getBossType() != 3) continue;
+
+            // count alive non-boss enemies
+            int minionCount = 0;
+            for (auto& e2 : en)
+                if (e2.isAlive() && !e2.isBoss()) minionCount++;
+
+            int maxMinions = enemy.getHealth() / enemy.getMaxHealth() < 0.5f ? 6 : 4;
+            if (minionCount < maxMinions)
+            {
+                float angle = (float)(std::rand() % 628) / 100.f;
+                float r = enemy.getRadius() + 40.f;
+                float sx = enemy.getPosition().x + std::cos(angle) * r;
+                float sy = enemy.getPosition().y + std::sin(angle) * r;
+                if (sx < 40.f) sx = 40.f; if (sx > 760.f) sx = 760.f;
+                if (sy < 40.f) sy = 40.f; if (sy > 560.f) sy = 560.f;
+
+                EnemyType mt = (std::rand() % 2 == 0) ? EnemyType::Chaser : EnemyType::Dasher;
+                en.emplace_back(sx, sy, mt);
+                spawnParticles(sf::Vector2f(sx, sy), sf::Color(255, 180, 60), 6, 80.f, 2.f);
+            }
+        }
+    }
+
     auto& enemies = currentRoom().getEnemies();
     for (auto& enemy : enemies)
     {
@@ -671,9 +700,23 @@ void Game::checkCollisions()
             if (!enemy.isAlive() || !enemy.canBeDashHit()) continue;
             if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() + 10.f)
             {
-                enemy.takeDamage(player.getDashDamage());
+                float dmg = player.getDashDamage();
+
+                // Phantom boss: dash stuns it and deals bonus damage
+                if (enemy.isBoss() && enemy.getBossType() == 2)
+                {
+                    if (!enemy.isStunned())
+                    {
+                        enemy.stun(3.f);
+                        dmg *= 2.f;
+                        spawnParticles(enemy.getPosition(), sf::Color(255, 255, 100), 20, 200.f, 4.f);
+                        addScreenShake(6.f, 0.2f);
+                    }
+                }
+
+                enemy.takeDamage(dmg);
                 enemy.markDashHit();
-                dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getDashDamage(), sf::Color(80, 180, 255));
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
                 spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
             }
@@ -688,6 +731,18 @@ void Game::checkCollisions()
             float d = dist(pp, enemy.getPosition());
             if (d < player.getGroundPoundRadius() + enemy.getRadius())
             {
+                // Guardian boss: slam breaks shield
+                if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
+                {
+                    enemy.breakShield(4.f);
+                    spawnParticles(enemy.getPosition(), sf::Color(180, 100, 255), 25, 250.f, 5.f);
+                    addScreenShake(10.f, 0.3f);
+                }
+
+                // Shielder enemies: slam breaks their shield
+                if (enemy.getType() == EnemyType::Shielder && enemy.isShieldUp())
+                    enemy.breakShield(3.f);
+
                 enemy.takeDamage(player.getGroundPoundDamage());
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getGroundPoundDamage(), sf::Color(80, 210, 80));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
@@ -852,10 +907,30 @@ void Game::draw()
         txt.setFont(font);
         txt.setCharacterSize(44);
         txt.setFillColor(sf::Color(220, 40, 40));
-        txt.setString("BOSS ROOM");
+        std::string introName;
+        std::string introHint;
+        sf::Color introColor(220, 40, 40);
+        switch (currentFloor)
+        {
+        case 1: introName = "THE GUARDIAN"; introHint = "Break its shield with SLAM [3]"; introColor = sf::Color(180, 80, 255); break;
+        case 2: introName = "THE PHANTOM"; introHint = "Stun it with DASH [1]"; introColor = sf::Color(60, 220, 140); break;
+        case 3: introName = "THE HIVE"; introHint = "Clear minions with SLAM, snipe the core"; introColor = sf::Color(255, 160, 40); break;
+        default: introName = "BOSS"; introHint = ""; break;
+        }
+        txt.setString(introName);
+        txt.setFillColor(introColor);
         sf::FloatRect b = txt.getLocalBounds();
-        txt.setPosition(400.f - b.width / 2.f, 240.f);
+        txt.setPosition(400.f - b.width / 2.f, 220.f);
         window.draw(txt);
+
+        sf::Text hint;
+        hint.setFont(font);
+        hint.setCharacterSize(14);
+        hint.setFillColor(sf::Color(200, 200, 220));
+        hint.setString(introHint);
+        b = hint.getLocalBounds();
+        hint.setPosition(400.f - b.width / 2.f, 275.f);
+        window.draw(hint);
 
         sf::Text sub;
         sub.setFont(font);
@@ -885,14 +960,6 @@ void Game::drawMinimap()
     float padding = 2.f;
     float startX = 800.f - (mapSize * (cellSize + padding)) - 10.f;
     float startY = 80.f;
-
-    sf::Text label;
-    label.setFont(font);
-    label.setCharacterSize(10);
-    label.setFillColor(sf::Color(120, 120, 140));
-    label.setString("MAP");
-    label.setPosition(startX, startY - 14.f);
-    window.draw(label);
 
     for (int x = 0; x < mapSize; x++)
     {
@@ -1002,7 +1069,15 @@ void Game::drawBossBar()
     labelTxt.setFont(font);
     labelTxt.setCharacterSize(12);
     labelTxt.setFillColor(sf::Color(220, 40, 40));
-    labelTxt.setString("FLOOR " + std::to_string(currentFloor) + " BOSS");
+    std::string bossName;
+    switch (currentFloor)
+    {
+    case 1: bossName = "THE GUARDIAN"; break;
+    case 2: bossName = "THE PHANTOM"; break;
+    case 3: bossName = "THE HIVE"; break;
+    default: bossName = "BOSS"; break;
+    }
+    labelTxt.setString(bossName);
     sf::FloatRect lb = labelTxt.getLocalBounds();
     labelTxt.setPosition(400.f - lb.width / 2.f, barY - 16.f);
     window.draw(labelTxt);
@@ -1936,9 +2011,11 @@ void Game::spawnDeathParticles(sf::Vector2f pos, EnemyType type)
     int count;
     switch (type)
     {
-    case EnemyType::Chaser:  c = sf::Color(220, 60, 60);  count = 10; break;
-    case EnemyType::Brute:   c = sf::Color(160, 50, 180); count = 18; break;
-    case EnemyType::Shooter: c = sf::Color(220, 180, 40); count = 12; break;
+    case EnemyType::Chaser:   c = sf::Color(220, 60, 60);   count = 10; break;
+    case EnemyType::Brute:    c = sf::Color(160, 50, 180);  count = 18; break;
+    case EnemyType::Shooter:  c = sf::Color(220, 180, 40);  count = 12; break;
+    case EnemyType::Dasher:   c = sf::Color(255, 100, 60);  count = 12; break;
+    case EnemyType::Shielder: c = sf::Color(60, 160, 200);  count = 14; break;
     }
     spawnParticles(pos, c, count, 180.f, 4.f);
 }
