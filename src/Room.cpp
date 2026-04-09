@@ -28,55 +28,27 @@ void Room::generate(int floor, RoomType type)
 
 void Room::generateShopItems()
 {
-    int numItems = 3;
-    float startX = 200.f;
+    ItemType allTypes[] = {
+        ItemType::FlameRing, ItemType::FrostShard,
+        ItemType::ThunderStrike, ItemType::ShadowDash, ItemType::BarrierShield
+    };
 
-    for (int i = 0; i < numItems; i++)
+    // shuffle to pick 3 unique items
+    int count = 5;
+    for (int i = count - 1; i > 0; i--)
     {
-        ShopItem item;
-        item.sold = false;
-        item.x = startX + i * 200.f;
-        item.y = 250.f;
+        int j = std::rand() % (i + 1);
+        ItemType tmp = allTypes[i];
+        allTypes[i] = allTypes[j];
+        allTypes[j] = tmp;
+    }
 
-        int roll = std::rand() % 5;
-        switch (roll)
-        {
-        case 0:
-            item.name = "Health Potion";
-            item.desc = "Restore 40 HP";
-            item.cost = 15 + floorNum * 5;
-            item.type = 0;
-            item.value = 40.f;
-            break;
-        case 1:
-            item.name = "Heart Crystal";
-            item.desc = "+25 Max HP";
-            item.cost = 25 + floorNum * 5;
-            item.type = 1;
-            item.value = 25.f;
-            break;
-        case 2:
-            item.name = "Speed Boots";
-            item.desc = "+10% Speed";
-            item.cost = 20 + floorNum * 5;
-            item.type = 2;
-            item.value = 0.1f;
-            break;
-        case 3:
-            item.name = "Attack Gem";
-            item.desc = "+15% Damage";
-            item.cost = 25 + floorNum * 5;
-            item.type = 3;
-            item.value = 0.15f;
-            break;
-        case 4:
-            item.name = "Swift Charm";
-            item.desc = "-15% Cooldowns";
-            item.cost = 25 + floorNum * 5;
-            item.type = 4;
-            item.value = 0.15f;
-            break;
-        }
+    float startX = 200.f;
+    for (int i = 0; i < 3; i++)
+    {
+        Item item = Item::create(allTypes[i], floorNum);
+        item.shopX = startX + i * 200.f;
+        item.shopY = 230.f;
         shopItems.push_back(item);
     }
 }
@@ -358,17 +330,26 @@ void Room::drawShop(sf::RenderWindow& window, const sf::Font& font)
     title.setFont(font);
     title.setCharacterSize(28);
     title.setFillColor(sf::Color(255, 220, 80));
-    title.setString("SHOP");
+    title.setString("WEAPON SHOP");
     sf::FloatRect b = title.getLocalBounds();
-    title.setPosition(400.f - b.width / 2.f, 100.f);
+    title.setPosition(400.f - b.width / 2.f, 60.f);
     window.draw(title);
+
+    sf::Text hint;
+    hint.setFont(font);
+    hint.setCharacterSize(12);
+    hint.setFillColor(sf::Color(140, 140, 160));
+    hint.setString("Buy a weapon - press E to use its special move");
+    b = hint.getLocalBounds();
+    hint.setPosition(400.f - b.width / 2.f, 95.f);
+    window.draw(hint);
 
     for (size_t i = 0; i < shopItems.size(); i++)
     {
         auto& item = shopItems[i];
 
-        sf::RectangleShape card(sf::Vector2f(140.f, 180.f));
-        card.setPosition(item.x - 70.f, item.y);
+        sf::RectangleShape card(sf::Vector2f(160.f, 220.f));
+        card.setPosition(item.shopX - 80.f, item.shopY);
         card.setFillColor(item.sold ? sf::Color(20, 20, 30) : sf::Color(30, 30, 50));
         card.setOutlineColor(item.sold ? sf::Color(40, 40, 50) : sf::Color(255, 220, 80));
         card.setOutlineThickness(item.sold ? 1.f : 2.f);
@@ -382,18 +363,20 @@ void Room::drawShop(sf::RenderWindow& window, const sf::Font& font)
             soldTxt.setFillColor(sf::Color(80, 80, 80));
             soldTxt.setString("SOLD");
             b = soldTxt.getLocalBounds();
-            soldTxt.setPosition(item.x - b.width / 2.f, item.y + 70.f);
+            soldTxt.setPosition(item.shopX - b.width / 2.f, item.shopY + 90.f);
             window.draw(soldTxt);
             continue;
         }
 
+        Item::drawIcon(window, item.type, item.shopX, item.shopY + 50.f, 2.f);
+
         sf::Text nameTxt;
         nameTxt.setFont(font);
-        nameTxt.setCharacterSize(14);
+        nameTxt.setCharacterSize(15);
         nameTxt.setFillColor(sf::Color::White);
         nameTxt.setString(item.name);
         b = nameTxt.getLocalBounds();
-        nameTxt.setPosition(item.x - b.width / 2.f, item.y + 20.f);
+        nameTxt.setPosition(item.shopX - b.width / 2.f, item.shopY + 100.f);
         window.draw(nameTxt);
 
         sf::Text descTxt;
@@ -402,7 +385,7 @@ void Room::drawShop(sf::RenderWindow& window, const sf::Font& font)
         descTxt.setFillColor(sf::Color(160, 160, 180));
         descTxt.setString(item.desc);
         b = descTxt.getLocalBounds();
-        descTxt.setPosition(item.x - b.width / 2.f, item.y + 50.f);
+        descTxt.setPosition(item.shopX - b.width / 2.f, item.shopY + 125.f);
         window.draw(descTxt);
 
         sf::Text costTxt;
@@ -411,7 +394,7 @@ void Room::drawShop(sf::RenderWindow& window, const sf::Font& font)
         costTxt.setFillColor(sf::Color(255, 220, 80));
         costTxt.setString(std::to_string(item.cost) + " coins");
         b = costTxt.getLocalBounds();
-        costTxt.setPosition(item.x - b.width / 2.f, item.y + 90.f);
+        costTxt.setPosition(item.shopX - b.width / 2.f, item.shopY + 150.f);
         window.draw(costTxt);
 
         sf::Text keyTxt;
@@ -420,7 +403,7 @@ void Room::drawShop(sf::RenderWindow& window, const sf::Font& font)
         keyTxt.setFillColor(sf::Color(120, 200, 120));
         keyTxt.setString("[" + std::to_string(i + 1) + "]");
         b = keyTxt.getLocalBounds();
-        keyTxt.setPosition(item.x - b.width / 2.f, item.y + 130.f);
+        keyTxt.setPosition(item.shopX - b.width / 2.f, item.shopY + 180.f);
         window.draw(keyTxt);
     }
 }
@@ -433,7 +416,7 @@ bool Room::isVisited() const { return visited; }
 void Room::markVisited() { visited = true; }
 
 std::vector<Enemy>& Room::getEnemies() { return enemies; }
-std::vector<ShopItem>& Room::getShopItems() { return shopItems; }
+std::vector<Item>& Room::getShopItems() { return shopItems; }
 
 void Room::setDoor(int direction, bool exists) { doors[direction] = exists; }
 bool Room::hasDoor(int direction) const { return doors[direction]; }

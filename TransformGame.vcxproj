@@ -98,6 +98,7 @@
     <ClInclude Include="src\Projectile.h" />
     <ClInclude Include="src\Particle.h" />
     <ClInclude Include="src\SaveData.h" />
+    <ClInclude Include="src\Item.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
