@@ -8,13 +8,20 @@
 Game::Game(sf::RenderWindow& win)
     : window(win)
     , player(400.f, 300.f)
+    , state(GameState::Title)
     , score(0)
+    , scoreMultiplier(1)
+    , multiplierTimer(0.f)
     , wave(0)
-    , waveTimer(1.5f)
+    , enemiesPerWave(3)
+    , waveTimer(0.f)
+    , waveDelay(2.5f)
     , damageCooldown(0.f)
     , shakeIntensity(0.f)
     , shakeTimer(0.f)
     , shakeOffset(0.f, 0.f)
+    , waveAnnounceTimer(0.f)
+    , waveAnnounceNum(0)
     , fontLoaded(false)
 {
     std::srand((unsigned int)std::time(nullptr));
@@ -30,32 +37,46 @@ void Game::handleEvent(const sf::Event& event)
     if (event.type != sf::Event::KeyPressed)
         return;
 
-    if (!player.isAlive())
+    switch (state)
     {
-        if (event.key.code == sf::Keyboard::R)
-            restart();
-        return;
-    }
-
-    if (event.key.code == sf::Keyboard::Num1)
-        player.transform(Form::Circle);
-    else if (event.key.code == sf::Keyboard::Num2)
-        player.transform(Form::Triangle);
-    else if (event.key.code == sf::Keyboard::Num3)
-        player.transform(Form::Square);
-    else if (event.key.code == sf::Keyboard::Space)
-        player.useAbility();
-
-    if (player.justTransformed())
-    {
-        sf::Color c;
-        switch (player.getForm())
+    case GameState::Title:
+        if (event.key.code == sf::Keyboard::Enter || event.key.code == sf::Keyboard::Space)
         {
-        case Form::Circle:   c = sf::Color(80, 180, 255); break;
-        case Form::Triangle: c = sf::Color(255, 160, 40);  break;
-        case Form::Square:   c = sf::Color(80, 210, 80);   break;
+            state = GameState::Playing;
+            restart();
         }
-        spawnParticles(player.getPosition(), c, 20, 200.f, 5.f);
+        break;
+
+    case GameState::Playing:
+        if (event.key.code == sf::Keyboard::Num1)
+            player.transform(Form::Circle);
+        else if (event.key.code == sf::Keyboard::Num2)
+            player.transform(Form::Triangle);
+        else if (event.key.code == sf::Keyboard::Num3)
+            player.transform(Form::Square);
+        else if (event.key.code == sf::Keyboard::Space)
+            player.useAbility();
+
+        if (player.justTransformed())
+        {
+            sf::Color c;
+            switch (player.getForm())
+            {
+            case Form::Circle:   c = sf::Color(80, 180, 255); break;
+            case Form::Triangle: c = sf::Color(255, 160, 40);  break;
+            case Form::Square:   c = sf::Color(80, 210, 80);   break;
+            }
+            spawnParticles(player.getPosition(), c, 20, 200.f, 5.f);
+        }
+        break;
+
+    case GameState::GameOver:
+        if (event.key.code == sf::Keyboard::R)
+        {
+            state = GameState::Playing;
+            restart();
+        }
+        break;
     }
 }
 
@@ -73,7 +94,7 @@ void Game::update(float dt)
         shakeOffset = sf::Vector2f(0.f, 0.f);
     }
 
-    if (!player.isAlive())
+    if (state != GameState::Playing)
         return;
 
     player.handleInput(dt);
@@ -88,15 +109,18 @@ void Game::update(float dt)
         projectiles.emplace_back(pos, vel, 4.f, 20.f, true, sf::Color(255, 200, 60));
     }
 
-    if (enemies.empty())
+    if (enemies.empty() && waveAnnounceTimer <= 0.f)
     {
         waveTimer -= dt;
         if (waveTimer <= 0.f)
         {
             spawnWave();
-            waveTimer = 2.5f;
+            waveTimer = waveDelay;
         }
     }
+
+    if (waveAnnounceTimer > 0.f)
+        waveAnnounceTimer -= dt;
 
     for (auto& enemy : enemies)
         enemy.update(dt, player.getPosition(), projectiles);
@@ -135,6 +159,7 @@ void Game::update(float dt)
 
     if (!player.isAlive())
     {
+        state = GameState::GameOver;
         addScreenShake(12.f, 0.4f);
         spawnParticles(player.getPosition(), sf::Color::White, 30, 250.f, 6.f);
     }
@@ -164,12 +189,23 @@ void Game::draw()
     window.setView(window.getDefaultView());
 
     drawHUD();
+
+    if (waveAnnounceTimer > 0.f)
+        drawWaveAnnounce();
+
+    if (state == GameState::Title)
+        drawTitle();
+    else if (state == GameState::GameOver)
+        drawGameOver();
 }
 
 void Game::spawnWave()
 {
     wave++;
-    int count = 3 + (wave - 1) * 2;
+    waveAnnounceTimer = 1.5f;
+    waveAnnounceNum = wave;
+
+    int count = enemiesPerWave + (wave - 1) * 2;
 
     for (int i = 0; i < count; i++)
     {
@@ -409,40 +445,6 @@ void Game::drawHUD()
     abilTxt.setPosition(660.f, 36.f);
     window.draw(abilTxt);
 
-    if (!player.isAlive())
-    {
-        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-        overlay.setFillColor(sf::Color(0, 0, 0, 180));
-        window.draw(overlay);
-
-        sf::Text goText;
-        goText.setFont(font);
-        goText.setCharacterSize(48);
-        goText.setFillColor(sf::Color(220, 40, 40));
-        goText.setString("GAME OVER");
-        sf::FloatRect b = goText.getLocalBounds();
-        goText.setPosition(400.f - b.width / 2.f, 200.f);
-        window.draw(goText);
-
-        sf::Text scoreFinal;
-        scoreFinal.setFont(font);
-        scoreFinal.setCharacterSize(24);
-        scoreFinal.setFillColor(sf::Color::White);
-        scoreFinal.setString("Score: " + std::to_string(score) + "   Wave: " + std::to_string(wave));
-        b = scoreFinal.getLocalBounds();
-        scoreFinal.setPosition(400.f - b.width / 2.f, 275.f);
-        window.draw(scoreFinal);
-
-        sf::Text restartTxt;
-        restartTxt.setFont(font);
-        restartTxt.setCharacterSize(18);
-        restartTxt.setFillColor(sf::Color(180, 180, 180));
-        restartTxt.setString("Press R to restart");
-        b = restartTxt.getLocalBounds();
-        restartTxt.setPosition(400.f - b.width / 2.f, 330.f);
-        window.draw(restartTxt);
-    }
-
     sf::Text hint;
     hint.setFont(font);
     hint.setCharacterSize(12);
@@ -452,6 +454,118 @@ void Game::drawHUD()
     window.draw(hint);
 }
 
+void Game::drawTitle()
+{
+    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    window.draw(overlay);
+
+    if (!fontLoaded) return;
+
+    sf::Text title;
+    title.setFont(font);
+    title.setCharacterSize(52);
+    title.setFillColor(sf::Color::White);
+    title.setString("TRANSFORM ARENA");
+    sf::FloatRect b = title.getLocalBounds();
+    title.setPosition(400.f - b.width / 2.f, 160.f);
+    window.draw(title);
+
+    sf::Text sub;
+    sub.setFont(font);
+    sub.setCharacterSize(16);
+    sub.setFillColor(sf::Color(180, 180, 200));
+    sub.setString("Shift between forms to survive the arena");
+    b = sub.getLocalBounds();
+    sub.setPosition(400.f - b.width / 2.f, 230.f);
+    window.draw(sub);
+
+    float yStart = 290.f;
+    const char* descs[] = {
+        "[1] CIRCLE  -  Fast. Dash through enemies.",
+        "[2] TRIANGLE  -  Ranged. Shoot projectiles.",
+        "[3] SQUARE  -  Tank. Ground pound slam."
+    };
+    sf::Color colors[] = {
+        sf::Color(80, 180, 255),
+        sf::Color(255, 160, 40),
+        sf::Color(80, 210, 80)
+    };
+
+    for (int i = 0; i < 3; i++)
+    {
+        sf::Text desc;
+        desc.setFont(font);
+        desc.setCharacterSize(15);
+        desc.setFillColor(colors[i]);
+        desc.setString(descs[i]);
+        b = desc.getLocalBounds();
+        desc.setPosition(400.f - b.width / 2.f, yStart + i * 28.f);
+        window.draw(desc);
+    }
+
+    sf::Text start;
+    start.setFont(font);
+    start.setCharacterSize(20);
+    float pulse = (std::sin((float)std::clock() / 300.f) + 1.f) / 2.f;
+    start.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(120 + 135 * pulse)));
+    start.setString("Press ENTER or SPACE to start");
+    b = start.getLocalBounds();
+    start.setPosition(400.f - b.width / 2.f, 420.f);
+    window.draw(start);
+}
+
+void Game::drawGameOver()
+{
+    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    window.draw(overlay);
+
+    if (!fontLoaded) return;
+
+    sf::Text goText;
+    goText.setFont(font);
+    goText.setCharacterSize(48);
+    goText.setFillColor(sf::Color(220, 40, 40));
+    goText.setString("GAME OVER");
+    sf::FloatRect b = goText.getLocalBounds();
+    goText.setPosition(400.f - b.width / 2.f, 200.f);
+    window.draw(goText);
+
+    sf::Text scoreTxt;
+    scoreTxt.setFont(font);
+    scoreTxt.setCharacterSize(24);
+    scoreTxt.setFillColor(sf::Color::White);
+    scoreTxt.setString("Score: " + std::to_string(score) + "   Wave: " + std::to_string(wave));
+    b = scoreTxt.getLocalBounds();
+    scoreTxt.setPosition(400.f - b.width / 2.f, 275.f);
+    window.draw(scoreTxt);
+
+    sf::Text restart;
+    restart.setFont(font);
+    restart.setCharacterSize(18);
+    restart.setFillColor(sf::Color(180, 180, 180));
+    restart.setString("Press R to restart");
+    b = restart.getLocalBounds();
+    restart.setPosition(400.f - b.width / 2.f, 330.f);
+    window.draw(restart);
+}
+
+void Game::drawWaveAnnounce()
+{
+    if (!fontLoaded) return;
+
+    float alpha = std::min(1.f, waveAnnounceTimer / 0.5f);
+    sf::Text txt;
+    txt.setFont(font);
+    txt.setCharacterSize(36);
+    txt.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(255 * alpha)));
+    txt.setString("WAVE " + std::to_string(waveAnnounceNum));
+    sf::FloatRect b = txt.getLocalBounds();
+    txt.setPosition(400.f - b.width / 2.f, 260.f);
+    window.draw(txt);
+}
+
 void Game::restart()
 {
     player.reset(400.f, 300.f);
@@ -459,12 +573,24 @@ void Game::restart()
     projectiles.clear();
     particles.clear();
     score = 0;
+    scoreMultiplier = 1;
+    multiplierTimer = 0.f;
     wave = 0;
+    enemiesPerWave = 3;
     waveTimer = 1.5f;
     damageCooldown = 0.f;
     shakeIntensity = 0.f;
     shakeTimer = 0.f;
     shakeOffset = sf::Vector2f(0.f, 0.f);
+    waveAnnounceTimer = 0.f;
+}
+
+bool Game::isEffectiveForm(Form form, EnemyType enemy)
+{
+    if (form == Form::Circle && enemy == EnemyType::Chaser) return true;
+    if (form == Form::Triangle && enemy == EnemyType::Shooter) return true;
+    if (form == Form::Square && enemy == EnemyType::Brute) return true;
+    return false;
 }
 
 float Game::dist(sf::Vector2f a, sf::Vector2f b)
