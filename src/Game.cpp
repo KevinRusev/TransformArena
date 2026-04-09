@@ -259,7 +259,8 @@ void Game::update(float dt)
         sf::Vector2f dir = player.getFacing();
         float bulletSpeed = 500.f;
         sf::Vector2f vel(dir.x * bulletSpeed, dir.y * bulletSpeed);
-        projectiles.emplace_back(pos, vel, 4.f, 20.f, true, sf::Color(255, 200, 60));
+        float bulletDmg = 20.f * player.getDamageMultiplier();
+        projectiles.emplace_back(pos, vel, 4.f, bulletDmg, true, sf::Color(255, 200, 60));
     }
 
     currentRoom().update(dt, player.getPosition(), projectiles);
