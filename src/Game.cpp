@@ -162,6 +162,27 @@ void Game::generateFloor()
         }
     }
 
+    // connect all adjacent rooms with doors so the map feels connected
+    for (int x = 0; x < mapSize; x++)
+    {
+        for (int y = 0; y < mapSize; y++)
+        {
+            if (!used[x][y]) continue;
+            // check right neighbor
+            if (x + 1 < mapSize && used[x + 1][y])
+            {
+                rooms[x][y].setDoor(1, true);      // right
+                rooms[x + 1][y].setDoor(3, true);  // left
+            }
+            // check down neighbor
+            if (y + 1 < mapSize && used[x][y + 1])
+            {
+                rooms[x][y].setDoor(2, true);      // down
+                rooms[x][y + 1].setDoor(0, true);  // up
+            }
+        }
+    }
+
     // ensure shop exists
     if (shopPlaced < 0)
     {
