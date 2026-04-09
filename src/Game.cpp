@@ -57,6 +57,7 @@ void Game::handleEvent(const sf::Event& event)
         else if (event.key.code == sf::Keyboard::Space)
             player.useAbility();
 
+        // spawn transform particles
         if (player.justTransformed())
         {
             sf::Color c;
@@ -82,6 +83,7 @@ void Game::handleEvent(const sf::Event& event)
 
 void Game::update(float dt)
 {
+    // screen shake decay
     if (shakeTimer > 0.f)
     {
         shakeTimer -= dt;
@@ -100,6 +102,7 @@ void Game::update(float dt)
     player.handleInput(dt);
     player.update(dt);
 
+    // triangle shooting: spawn projectile when player requests
     if (player.wantsToShoot())
     {
         sf::Vector2f pos = player.getPosition();
@@ -109,6 +112,7 @@ void Game::update(float dt)
         projectiles.emplace_back(pos, vel, 4.f, 20.f, true, sf::Color(255, 200, 60));
     }
 
+    // wave spawning
     if (enemies.empty() && waveAnnounceTimer <= 0.f)
     {
         waveTimer -= dt;
@@ -122,23 +126,43 @@ void Game::update(float dt)
     if (waveAnnounceTimer > 0.f)
         waveAnnounceTimer -= dt;
 
+    // update enemies (they may spawn projectiles)
     for (auto& enemy : enemies)
         enemy.update(dt, player.getPosition(), projectiles);
 
+    // update projectiles
     for (auto& proj : projectiles)
         proj.update(dt);
 
+    // update particles
     for (auto& p : particles)
         p.update(dt);
 
+    // update pickups
+    for (auto& hp : pickups)
+        hp.update(dt);
+
     checkCollisions();
 
+    // remove dead enemies, spawn death particles, maybe drop health
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive())
         {
             spawnDeathParticles(enemy.getPosition(), enemy.getType());
-            score += 10;
+
+            int points = 10;
+            if (isEffectiveForm(player.getForm(), enemy.getType()))
+            {
+                points *= 2;
+                scoreMultiplier = std::min(scoreMultiplier + 1, 8);
+                multiplierTimer = 3.f;
+            }
+            score += points * scoreMultiplier;
+
+            // 25% chance to drop health
+            if (std::rand() % 100 < 25)
+                pickups.emplace_back(enemy.getPosition(), 15);
         }
     }
 
@@ -153,6 +177,18 @@ void Game::update(float dt)
     particles.erase(
         std::remove_if(particles.begin(), particles.end(), [](const Particle& p) { return !p.isAlive(); }),
         particles.end());
+
+    pickups.erase(
+        std::remove_if(pickups.begin(), pickups.end(), [](const HealthPickup& h) { return !h.isAlive(); }),
+        pickups.end());
+
+    // multiplier decay
+    if (multiplierTimer > 0.f)
+    {
+        multiplierTimer -= dt;
+        if (multiplierTimer <= 0.f)
+            scoreMultiplier = 1;
+    }
 
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
@@ -169,11 +205,15 @@ void Game::draw()
 {
     window.clear(sf::Color(18, 18, 28));
 
+    // apply screen shake via view offset
     sf::View view = window.getDefaultView();
     view.move(shakeOffset);
     window.setView(view);
 
     drawBackground();
+
+    for (auto& hp : pickups)
+        hp.draw(window);
 
     for (auto& p : particles)
         p.draw(window);
@@ -186,6 +226,7 @@ void Game::draw()
 
     player.draw(window);
 
+    // reset view for HUD (HUD shouldn't shake)
     window.setView(window.getDefaultView());
 
     drawHUD();
@@ -243,6 +284,7 @@ void Game::checkCollisions()
     sf::Vector2f pp = player.getPosition();
     float pr = player.getRadius();
 
+    // player dash damages enemies it passes through
     if (player.isDashing())
     {
         for (auto& enemy : enemies)
@@ -256,6 +298,7 @@ void Game::checkCollisions()
         }
     }
 
+    // ground pound damages nearby enemies
     if (player.isGroundPounding())
     {
         for (auto& enemy : enemies)
@@ -269,9 +312,11 @@ void Game::checkCollisions()
         }
     }
 
+    // player projectiles hit enemies
     for (auto& proj : projectiles)
     {
         if (!proj.fromPlayer || !proj.isAlive()) continue;
+
         for (auto& enemy : enemies)
         {
             if (!enemy.isAlive()) continue;
@@ -285,9 +330,11 @@ void Game::checkCollisions()
         }
     }
 
+    // enemy projectiles hit player
     for (auto& proj : projectiles)
     {
         if (proj.fromPlayer || !proj.isAlive()) continue;
+
         if (dist(proj.position, pp) < proj.radius + pr)
         {
             player.takeDamage((int)proj.damage);
@@ -297,6 +344,7 @@ void Game::checkCollisions()
         }
     }
 
+    // enemy contact damage
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive()) continue;
@@ -305,6 +353,18 @@ void Game::checkCollisions()
             player.takeDamage(enemy.getContactDamage());
             damageCooldown = 0.4f;
             addScreenShake(3.f, 0.1f);
+        }
+    }
+
+    // health pickup collection
+    for (auto& hp : pickups)
+    {
+        if (!hp.isAlive()) continue;
+        if (dist(pp, hp.position) < pr + 12.f)
+        {
+            player.heal(hp.healAmount);
+            hp.lifetime = 0.f;
+            spawnParticles(hp.position, sf::Color(80, 255, 80), 8, 100.f, 3.f);
         }
     }
 }
@@ -345,6 +405,7 @@ void Game::addScreenShake(float intensity, float duration)
 
 void Game::drawBackground()
 {
+    // subtle dot grid
     float spacing = 40.f;
     for (float x = spacing; x < 800.f; x += spacing)
     {
@@ -358,6 +419,7 @@ void Game::drawBackground()
         }
     }
 
+    // arena border
     sf::RectangleShape border(sf::Vector2f(790.f, 590.f));
     border.setPosition(5.f, 5.f);
     border.setFillColor(sf::Color::Transparent);
@@ -370,6 +432,7 @@ void Game::drawHUD()
 {
     if (!fontLoaded) return;
 
+    // health bar
     float barW = 200.f, barH = 14.f;
     float hp = (float)player.getHealth() / player.getMaxHealth();
 
@@ -391,14 +454,19 @@ void Game::drawHUD()
     hpBorder.setOutlineThickness(1.f);
     window.draw(hpBorder);
 
+    // score
     sf::Text scoreTxt;
     scoreTxt.setFont(font);
     scoreTxt.setCharacterSize(18);
     scoreTxt.setFillColor(sf::Color::White);
-    scoreTxt.setString("Score: " + std::to_string(score));
+    std::string scoreStr = "Score: " + std::to_string(score);
+    if (scoreMultiplier > 1)
+        scoreStr += "  x" + std::to_string(scoreMultiplier);
+    scoreTxt.setString(scoreStr);
     scoreTxt.setPosition(15.f, 36.f);
     window.draw(scoreTxt);
 
+    // wave
     sf::Text waveTxt;
     waveTxt.setFont(font);
     waveTxt.setCharacterSize(16);
@@ -407,6 +475,7 @@ void Game::drawHUD()
     waveTxt.setPosition(15.f, 58.f);
     window.draw(waveTxt);
 
+    // form indicator with descriptions
     std::string formName;
     std::string abilityDesc;
     sf::Color formColor;
@@ -445,6 +514,7 @@ void Game::drawHUD()
     abilTxt.setPosition(660.f, 36.f);
     window.draw(abilTxt);
 
+    // controls hint
     sf::Text hint;
     hint.setFont(font);
     hint.setCharacterSize(12);
@@ -480,6 +550,7 @@ void Game::drawTitle()
     sub.setPosition(400.f - b.width / 2.f, 230.f);
     window.draw(sub);
 
+    // form descriptions
     float yStart = 290.f;
     const char* descs[] = {
         "[1] CIRCLE  -  Fast. Dash through enemies.",
@@ -507,6 +578,7 @@ void Game::drawTitle()
     sf::Text start;
     start.setFont(font);
     start.setCharacterSize(20);
+    // pulsing alpha
     float pulse = (std::sin((float)std::clock() / 300.f) + 1.f) / 2.f;
     start.setFillColor(sf::Color(255, 255, 255, (sf::Uint8)(120 + 135 * pulse)));
     start.setString("Press ENTER or SPACE to start");
@@ -572,6 +644,7 @@ void Game::restart()
     enemies.clear();
     projectiles.clear();
     particles.clear();
+    pickups.clear();
     score = 0;
     scoreMultiplier = 1;
     multiplierTimer = 0.f;
@@ -587,6 +660,7 @@ void Game::restart()
 
 bool Game::isEffectiveForm(Form form, EnemyType enemy)
 {
+    // circle dash vs chasers, triangle shoot vs shooters, square pound vs brutes
     if (form == Form::Circle && enemy == EnemyType::Chaser) return true;
     if (form == Form::Triangle && enemy == EnemyType::Shooter) return true;
     if (form == Form::Square && enemy == EnemyType::Brute) return true;
