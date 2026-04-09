@@ -7,18 +7,18 @@
 Game::Game(sf::RenderWindow& win)
     : window(win)
     , player(400.f, 300.f)
+    , mapSize(5)
     , currentRoomX(2), currentRoomY(2)
     , currentFloor(1), totalFloors(3)
-    , bossRoomX(0), bossRoomY(0)
     , state(GameState::Title)
-    , score(0), scoreMultiplier(1), multiplierTimer(0.f)
+    , score(0), coins(0), scoreMultiplier(1), multiplierTimer(0.f)
     , damageCooldown(0.f), totalKills(0), playTime(0.f)
+    , armor(3), maxArmor(3), armorRegenTimer(0.f)
     , shakeIntensity(0.f), shakeTimer(0.f), shakeOffset(0.f, 0.f)
     , transitionTimer(0.f), transitionDir(-1)
     , bossAlive(false), bossIntroTimer(0.f)
     , choosingBuff(false)
-    , hasContinue(false)
-    , titleSelection(0)
+    , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
 {
     std::srand((unsigned int)std::time(nullptr));
@@ -34,11 +34,14 @@ Game::Game(sf::RenderWindow& win)
 
 void Game::generateFloor()
 {
-    for (int x = 0; x < MAP_SIZE; x++)
-        for (int y = 0; y < MAP_SIZE; y++)
+    mapSize = 5 + currentFloor; // 6,7,8 for floors 1,2,3
+    if (mapSize > MAX_MAP) mapSize = MAX_MAP;
+
+    for (int x = 0; x < MAX_MAP; x++)
+        for (int y = 0; y < MAX_MAP; y++)
             rooms[x][y] = Room();
 
-    int startX = 2, startY = 2;
+    int startX = mapSize / 2, startY = mapSize / 2;
     currentRoomX = startX;
     currentRoomY = startY;
 
@@ -46,22 +49,26 @@ void Game::generateFloor()
     path.push_back({startX, startY});
     rooms[startX][startY].gridX = startX;
     rooms[startX][startY].gridY = startY;
-    rooms[startX][startY].generate(currentFloor, false);
+    rooms[startX][startY].generate(currentFloor, RoomType::Start);
 
-    int roomCount = 4 + currentFloor;
+    // main path rooms: floor1=5, floor2=7, floor3=9
+    int roomCount = 4 + currentFloor * 2;
     int dx[] = {0, 1, 0, -1};
     int dy[] = {-1, 0, 1, 0};
 
     int cx = startX, cy = startY;
+    int shopPlaced = -1;
+    int shopTarget = roomCount / 2; // shop in the middle
+
     for (int i = 0; i < roomCount; i++)
     {
         bool placed = false;
-        for (int attempts = 0; attempts < 20; attempts++)
+        for (int attempts = 0; attempts < 30; attempts++)
         {
             int dir = std::rand() % 4;
             int nx = cx + dx[dir];
             int ny = cy + dy[dir];
-            if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
+            if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize) continue;
 
             bool inPath = false;
             for (auto& p : path)
@@ -69,19 +76,20 @@ void Game::generateFloor()
             if (inPath) continue;
 
             rooms[cx][cy].setDoor(dir, true);
-            int oppDir = (dir + 2) % 4;
-            rooms[nx][ny].setDoor(oppDir, true);
+            rooms[nx][ny].setDoor((dir + 2) % 4, true);
 
-            bool isBoss = (i == roomCount - 1);
+            RoomType type = RoomType::Normal;
+            if (i == roomCount - 1)
+                type = RoomType::Boss;
+            else if (i == shopTarget && shopPlaced < 0)
+            {
+                type = RoomType::Shop;
+                shopPlaced = (int)path.size();
+            }
+
             rooms[nx][ny].gridX = nx;
             rooms[nx][ny].gridY = ny;
-            rooms[nx][ny].generate(currentFloor, isBoss);
-
-            if (isBoss)
-            {
-                bossRoomX = nx;
-                bossRoomY = ny;
-            }
+            rooms[nx][ny].generate(currentFloor, type);
 
             path.push_back({nx, ny});
             cx = nx;
@@ -101,14 +109,14 @@ void Game::generateFloor()
         }
     }
 
-    // branch rooms
-    for (int b = 0; b < 2; b++)
+    // branch rooms (not after boss)
+    for (int b = 0; b < 2 + currentFloor; b++)
     {
-        int idx = std::rand() % (int)path.size();
+        int idx = std::rand() % ((int)path.size() - 1); // exclude boss from being branch source
         int bx = path[idx].first, by = path[idx].second;
         int dir = std::rand() % 4;
         int nx = bx + dx[dir], ny = by + dy[dir];
-        if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE)
+        if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize)
         {
             bool exists = false;
             for (auto& p : path)
@@ -119,14 +127,43 @@ void Game::generateFloor()
                 rooms[nx][ny].setDoor((dir + 2) % 4, true);
                 rooms[nx][ny].gridX = nx;
                 rooms[nx][ny].gridY = ny;
-                rooms[nx][ny].generate(currentFloor, false);
+                rooms[nx][ny].generate(currentFloor, RoomType::Normal);
                 path.push_back({nx, ny});
+            }
+        }
+    }
+
+    // if shop wasn't placed, convert a branch room
+    if (shopPlaced < 0)
+    {
+        for (size_t i = 1; i < path.size() - 1; i++)
+        {
+            auto& p = path[i];
+            Room& r = rooms[p.first][p.second];
+            if (r.getType() == RoomType::Normal)
+            {
+                r.generate(currentFloor, RoomType::Shop);
+                shopPlaced = (int)i;
+                break;
             }
         }
     }
 
     rooms[startX][startY].markVisited();
     player.reset(400.f, 300.f);
+
+    // reapply buff multipliers after reset
+    float spd = 1.f, dmg = 1.f, cd = 1.f;
+    for (auto& buff : ownedBuffs)
+    {
+        spd += buff.speedBonus;
+        dmg += buff.damageBonus;
+        cd -= buff.cooldownReduction;
+    }
+    if (cd < 0.3f) cd = 0.3f;
+    player.setSpeedMultiplier(spd);
+    player.setDamageMultiplier(dmg);
+    player.setCooldownMultiplier(cd);
 }
 
 Room& Game::currentRoom()
@@ -177,11 +214,22 @@ void Game::handleEvent(const sf::Event& event)
             return;
         }
 
-        if (event.key.code == sf::Keyboard::Num1)
+        // shop purchases
+        if (currentRoom().isShopRoom())
+        {
+            if (event.key.code == sf::Keyboard::Num1)
+                tryBuyShopItem(0);
+            else if (event.key.code == sf::Keyboard::Num2)
+                tryBuyShopItem(1);
+            else if (event.key.code == sf::Keyboard::Num3)
+                tryBuyShopItem(2);
+        }
+
+        if (event.key.code == sf::Keyboard::Num1 && !currentRoom().isShopRoom())
             player.transform(Form::Circle);
-        else if (event.key.code == sf::Keyboard::Num2)
+        else if (event.key.code == sf::Keyboard::Num2 && !currentRoom().isShopRoom())
             player.transform(Form::Triangle);
-        else if (event.key.code == sf::Keyboard::Num3)
+        else if (event.key.code == sf::Keyboard::Num3 && !currentRoom().isShopRoom())
             player.transform(Form::Square);
         else if (event.key.code == sf::Keyboard::Space)
             player.useAbility();
@@ -210,6 +258,28 @@ void Game::handleEvent(const sf::Event& event)
     case GameState::BossIntro:
         break;
     }
+}
+
+void Game::tryBuyShopItem(int index)
+{
+    auto& items = currentRoom().getShopItems();
+    if (index < 0 || index >= (int)items.size()) return;
+    auto& item = items[index];
+    if (item.sold || coins < item.cost) return;
+
+    coins -= item.cost;
+    item.sold = true;
+
+    switch (item.type)
+    {
+    case 0: player.heal((int)item.value); break;
+    case 1: player.addMaxHealth((int)item.value); break;
+    case 2: player.setSpeedMultiplier(player.getSpeedMultiplier() + item.value); break;
+    case 3: player.setDamageMultiplier(player.getDamageMultiplier() + item.value); break;
+    case 4: player.setCooldownMultiplier(std::max(0.3f, player.getCooldownMultiplier() - item.value)); break;
+    }
+
+    spawnParticles(player.getPosition(), sf::Color(255, 220, 80), 15, 150.f, 4.f);
 }
 
 void Game::update(float dt)
@@ -244,6 +314,29 @@ void Game::update(float dt)
     playTime += dt;
     player.handleInput(dt);
 
+    // clamp player inside walls (16px thick)
+    {
+        sf::Vector2f pp = player.getPosition();
+        float pr = player.getRadius();
+        float wall = 18.f;
+        if (pp.x - pr < wall) player.setPosition(wall + pr, pp.y);
+        if (pp.x + pr > 800.f - wall) player.setPosition(800.f - wall - pr, pp.y);
+        pp = player.getPosition();
+        if (pp.y - pr < wall) player.setPosition(pp.x, wall + pr);
+        if (pp.y + pr > 600.f - wall) player.setPosition(pp.x, 600.f - wall - pr);
+    }
+
+    // but allow through doors
+    {
+        sf::Vector2f pp = player.getPosition();
+        float pr = player.getRadius();
+        for (int d = 0; d < 4; d++)
+        {
+            if (!currentRoom().doorOpen(d)) continue;
+            // if near door zone, don't clamp
+        }
+    }
+
     if (player.getForm() == Form::Triangle)
     {
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
@@ -253,13 +346,24 @@ void Game::update(float dt)
 
     player.update(dt);
 
+    // armor regen
+    if (armor < maxArmor)
+    {
+        armorRegenTimer += dt;
+        if (armorRegenTimer > 3.f)
+        {
+            armor++;
+            armorRegenTimer = 0.f;
+        }
+    }
+
     if (player.wantsToShoot())
     {
         sf::Vector2f pos = player.getPosition();
         sf::Vector2f dir = player.getFacing();
         float bulletSpeed = 500.f;
-        sf::Vector2f vel(dir.x * bulletSpeed, dir.y * bulletSpeed);
         float bulletDmg = 20.f * player.getDamageMultiplier();
+        sf::Vector2f vel(dir.x * bulletSpeed, dir.y * bulletSpeed);
         projectiles.emplace_back(pos, vel, 4.f, bulletDmg, true, sf::Color(255, 200, 60));
     }
 
@@ -287,6 +391,11 @@ void Game::update(float dt)
             spawnDeathParticles(enemy.getPosition(), enemy.getType());
             totalKills++;
 
+            // coins from kills
+            int coinDrop = 2 + std::rand() % 3;
+            if (enemy.isBoss()) coinDrop = 15 + currentFloor * 5;
+            coins += coinDrop;
+
             int points = enemy.isBoss() ? 100 : 10;
             if (isEffectiveForm(player.getForm(), enemy.getType()))
             {
@@ -296,7 +405,7 @@ void Game::update(float dt)
             }
             score += points * scoreMultiplier;
 
-            if (!enemy.isBoss() && std::rand() % 100 < 25)
+            if (!enemy.isBoss() && std::rand() % 100 < 20)
                 pickups.emplace_back(enemy.getPosition(), 15);
 
             if (enemy.isBoss())
@@ -337,7 +446,6 @@ void Game::update(float dt)
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
 
-    // boss room cleared -> buff choice or win
     if (currentRoom().isBossRoom() && currentRoom().isCleared() && !choosingBuff && !bossAlive)
     {
         if (currentFloor >= totalFloors)
@@ -377,14 +485,15 @@ void Game::checkDoorTransition()
     sf::Vector2f pp = player.getPosition();
     float pr = player.getRadius();
     int dir = -1;
+    float doorZone = 80.f; // how close to center of edge the player needs to be
 
-    if (pp.y - pr <= 2.f && currentRoom().doorOpen(0) && std::abs(pp.x - 400.f) < 50.f)
+    if (pp.y - pr <= 20.f && currentRoom().doorOpen(0) && std::abs(pp.x - 400.f) < doorZone)
         dir = 0;
-    else if (pp.x + pr >= 798.f && currentRoom().doorOpen(1) && std::abs(pp.y - 300.f) < 50.f)
+    else if (pp.x + pr >= 780.f && currentRoom().doorOpen(1) && std::abs(pp.y - 300.f) < doorZone)
         dir = 1;
-    else if (pp.y + pr >= 598.f && currentRoom().doorOpen(2) && std::abs(pp.x - 400.f) < 50.f)
+    else if (pp.y + pr >= 580.f && currentRoom().doorOpen(2) && std::abs(pp.x - 400.f) < doorZone)
         dir = 2;
-    else if (pp.x - pr <= 2.f && currentRoom().doorOpen(3) && std::abs(pp.y - 300.f) < 50.f)
+    else if (pp.x - pr <= 20.f && currentRoom().doorOpen(3) && std::abs(pp.y - 300.f) < doorZone)
         dir = 3;
 
     if (dir >= 0)
@@ -393,12 +502,12 @@ void Game::checkDoorTransition()
 
 void Game::transitionToRoom(int dir)
 {
-    int dx[] = {0, 1, 0, -1};
-    int dy[] = {-1, 0, 1, 0};
+    int dxArr[] = {0, 1, 0, -1};
+    int dyArr[] = {-1, 0, 1, 0};
 
-    int nx = currentRoomX + dx[dir];
-    int ny = currentRoomY + dy[dir];
-    if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) return;
+    int nx = currentRoomX + dxArr[dir];
+    int ny = currentRoomY + dyArr[dir];
+    if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize) return;
 
     currentRoomX = nx;
     currentRoomY = ny;
@@ -411,10 +520,10 @@ void Game::transitionToRoom(int dir)
     float px = 400.f, py = 300.f;
     switch (dir)
     {
-    case 0: py = 560.f; break;
-    case 1: px = 40.f;  break;
-    case 2: py = 40.f;  break;
-    case 3: px = 760.f; break;
+    case 0: py = 550.f; break;
+    case 1: px = 50.f;  break;
+    case 2: py = 50.f;  break;
+    case 3: px = 750.f; break;
     }
     player.setPosition(px, py);
 
@@ -494,7 +603,13 @@ void Game::checkCollisions()
         {
             if (!player.isInvincible())
             {
-                player.takeDamage((int)proj.damage);
+                if (armor > 0)
+                {
+                    armor--;
+                    armorRegenTimer = 0.f;
+                }
+                else
+                    player.takeDamage((int)proj.damage);
                 addScreenShake(4.f, 0.15f);
             }
             proj.lifetime = 0.f;
@@ -509,7 +624,13 @@ void Game::checkCollisions()
             if (!enemy.isAlive()) continue;
             if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius())
             {
-                player.takeDamage(enemy.getContactDamage());
+                if (armor > 0)
+                {
+                    armor--;
+                    armorRegenTimer = 0.f;
+                }
+                else
+                    player.takeDamage(enemy.getContactDamage());
                 damageCooldown = 0.4f;
                 addScreenShake(3.f, 0.1f);
                 break;
@@ -531,13 +652,14 @@ void Game::checkCollisions()
 
 void Game::draw()
 {
-    window.clear(sf::Color(18, 18, 28));
+    window.clear(sf::Color(10, 10, 16));
 
     sf::View view = window.getDefaultView();
     view.move(shakeOffset);
     window.setView(view);
 
-    drawBackground();
+    currentRoom().drawFloor(window);
+    currentRoom().drawWalls(window);
     currentRoom().drawDoors(window);
 
     for (auto& hp : pickups)
@@ -559,6 +681,9 @@ void Game::draw()
             dn.draw(window, font);
     }
 
+    if (fontLoaded && currentRoom().isShopRoom())
+        currentRoom().drawShop(window, font);
+
     window.setView(window.getDefaultView());
 
     drawHUD();
@@ -573,14 +698,27 @@ void Game::draw()
         drawGameOver();
     else if (state == GameState::BossIntro && fontLoaded)
     {
+        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+        overlay.setFillColor(sf::Color(0, 0, 0, 120));
+        window.draw(overlay);
+
         sf::Text txt;
         txt.setFont(font);
-        txt.setCharacterSize(40);
+        txt.setCharacterSize(44);
         txt.setFillColor(sf::Color(220, 40, 40));
         txt.setString("BOSS ROOM");
         sf::FloatRect b = txt.getLocalBounds();
-        txt.setPosition(400.f - b.width / 2.f, 250.f);
+        txt.setPosition(400.f - b.width / 2.f, 240.f);
         window.draw(txt);
+
+        sf::Text sub;
+        sub.setFont(font);
+        sub.setCharacterSize(18);
+        sub.setFillColor(sf::Color(180, 80, 80));
+        sub.setString("Floor " + std::to_string(currentFloor));
+        b = sub.getLocalBounds();
+        sub.setPosition(400.f - b.width / 2.f, 295.f);
+        window.draw(sub);
     }
 
     if (choosingBuff)
@@ -590,36 +728,13 @@ void Game::draw()
         drawRoomTransition();
 }
 
-void Game::drawBackground()
-{
-    float spacing = 40.f;
-    for (float x = spacing; x < 800.f; x += spacing)
-    {
-        for (float y = spacing; y < 600.f; y += spacing)
-        {
-            sf::CircleShape dot(1.2f);
-            dot.setOrigin(1.2f, 1.2f);
-            dot.setPosition(x, y);
-            dot.setFillColor(sf::Color(40, 40, 55));
-            window.draw(dot);
-        }
-    }
-
-    sf::RectangleShape border(sf::Vector2f(790.f, 590.f));
-    border.setPosition(5.f, 5.f);
-    border.setFillColor(sf::Color::Transparent);
-    border.setOutlineColor(sf::Color(50, 50, 70));
-    border.setOutlineThickness(2.f);
-    window.draw(border);
-}
-
 void Game::drawMinimap()
 {
     if (!fontLoaded) return;
 
-    float cellSize = 12.f;
+    float cellSize = 14.f;
     float padding = 2.f;
-    float startX = 800.f - (MAP_SIZE * (cellSize + padding)) - 15.f;
+    float startX = 800.f - (mapSize * (cellSize + padding)) - 10.f;
     float startY = 80.f;
 
     sf::Text label;
@@ -630,36 +745,69 @@ void Game::drawMinimap()
     label.setPosition(startX, startY - 14.f);
     window.draw(label);
 
-    for (int x = 0; x < MAP_SIZE; x++)
+    for (int x = 0; x < mapSize; x++)
     {
-        for (int y = 0; y < MAP_SIZE; y++)
+        for (int y = 0; y < mapSize; y++)
         {
             Room& r = rooms[x][y];
             bool hasRoom = false;
             for (int d = 0; d < 4; d++)
                 if (r.hasDoor(d)) { hasRoom = true; break; }
-            if (x == 2 && y == 2) hasRoom = true;
+            if (r.getType() == RoomType::Start) hasRoom = true;
             if (!hasRoom && !r.isVisited()) continue;
 
+            float cx = startX + x * (cellSize + padding);
+            float cy = startY + y * (cellSize + padding);
+
             sf::RectangleShape cell(sf::Vector2f(cellSize, cellSize));
-            cell.setPosition(startX + x * (cellSize + padding), startY + y * (cellSize + padding));
+            cell.setPosition(cx, cy);
 
             if (x == currentRoomX && y == currentRoomY)
                 cell.setFillColor(sf::Color(255, 255, 255));
             else if (r.isBossRoom() && r.isVisited())
-                cell.setFillColor(sf::Color(220, 40, 40));
+                cell.setFillColor(sf::Color(180, 30, 30));
+            else if (r.isBossRoom())
+                cell.setFillColor(sf::Color(80, 20, 20));
+            else if (r.isShopRoom() && r.isVisited())
+                cell.setFillColor(sf::Color(180, 160, 40));
+            else if (r.isShopRoom())
+                cell.setFillColor(sf::Color(60, 55, 20));
             else if (r.isCleared())
                 cell.setFillColor(sf::Color(60, 120, 60));
             else if (r.isVisited())
                 cell.setFillColor(sf::Color(100, 100, 140));
             else if (hasRoom)
-                cell.setFillColor(sf::Color(40, 40, 55));
+                cell.setFillColor(sf::Color(35, 35, 48));
             else
                 continue;
 
-            cell.setOutlineColor(sf::Color(80, 80, 100));
+            cell.setOutlineColor(sf::Color(60, 60, 80));
             cell.setOutlineThickness(1.f);
             window.draw(cell);
+
+            // boss skull icon
+            if (r.isBossRoom())
+            {
+                sf::Text icon;
+                icon.setFont(font);
+                icon.setCharacterSize(9);
+                icon.setFillColor(sf::Color(220, 40, 40));
+                icon.setString("B");
+                icon.setPosition(cx + 3.f, cy + 1.f);
+                window.draw(icon);
+            }
+
+            // shop coin icon
+            if (r.isShopRoom())
+            {
+                sf::Text icon;
+                icon.setFont(font);
+                icon.setCharacterSize(9);
+                icon.setFillColor(sf::Color(255, 220, 80));
+                icon.setString("$");
+                icon.setPosition(cx + 3.f, cy + 1.f);
+                window.draw(icon);
+            }
         }
     }
 }
@@ -701,22 +849,24 @@ void Game::drawBossBar()
     border.setOutlineThickness(1.f);
     window.draw(border);
 
-    sf::Text label;
-    label.setFont(font);
-    label.setCharacterSize(12);
-    label.setFillColor(sf::Color(220, 40, 40));
-    label.setString("FLOOR " + std::to_string(currentFloor) + " BOSS");
-    sf::FloatRect lb = label.getLocalBounds();
-    label.setPosition(400.f - lb.width / 2.f, barY - 16.f);
-    window.draw(label);
+    sf::Text labelTxt;
+    labelTxt.setFont(font);
+    labelTxt.setCharacterSize(12);
+    labelTxt.setFillColor(sf::Color(220, 40, 40));
+    labelTxt.setString("FLOOR " + std::to_string(currentFloor) + " BOSS");
+    sf::FloatRect lb = labelTxt.getLocalBounds();
+    labelTxt.setPosition(400.f - lb.width / 2.f, barY - 16.f);
+    window.draw(labelTxt);
 }
 
 void Game::drawHUD()
 {
     if (!fontLoaded) return;
 
+    // health bar
     float barW = 200.f, barH = 14.f;
     float hp = (float)player.getHealth() / player.getMaxHealth();
+    if (hp < 0.f) hp = 0.f;
 
     sf::RectangleShape hpBg(sf::Vector2f(barW, barH));
     hpBg.setPosition(15.f, 15.f);
@@ -736,25 +886,47 @@ void Game::drawHUD()
     hpBorder.setOutlineThickness(1.f);
     window.draw(hpBorder);
 
+    // armor pips
+    for (int i = 0; i < maxArmor; i++)
+    {
+        sf::RectangleShape pip(sf::Vector2f(12.f, 6.f));
+        pip.setPosition(15.f + i * 16.f, 32.f);
+        pip.setFillColor(i < armor ? sf::Color(100, 150, 255) : sf::Color(30, 30, 40));
+        pip.setOutlineColor(sf::Color(80, 80, 120));
+        pip.setOutlineThickness(1.f);
+        window.draw(pip);
+    }
+
+    // score and coins
     sf::Text scoreTxt;
     scoreTxt.setFont(font);
-    scoreTxt.setCharacterSize(18);
+    scoreTxt.setCharacterSize(16);
     scoreTxt.setFillColor(sf::Color::White);
     std::string scoreStr = "Score: " + std::to_string(score);
     if (scoreMultiplier > 1)
         scoreStr += "  x" + std::to_string(scoreMultiplier);
     scoreTxt.setString(scoreStr);
-    scoreTxt.setPosition(15.f, 36.f);
+    scoreTxt.setPosition(15.f, 42.f);
     window.draw(scoreTxt);
 
+    sf::Text coinTxt;
+    coinTxt.setFont(font);
+    coinTxt.setCharacterSize(16);
+    coinTxt.setFillColor(sf::Color(255, 220, 80));
+    coinTxt.setString("Coins: " + std::to_string(coins));
+    coinTxt.setPosition(15.f, 60.f);
+    window.draw(coinTxt);
+
+    // floor indicator
     sf::Text floorTxt;
     floorTxt.setFont(font);
-    floorTxt.setCharacterSize(16);
-    floorTxt.setFillColor(sf::Color(180, 180, 200));
+    floorTxt.setCharacterSize(14);
+    floorTxt.setFillColor(sf::Color(140, 140, 160));
     floorTxt.setString("Floor " + std::to_string(currentFloor) + "/" + std::to_string(totalFloors));
-    floorTxt.setPosition(15.f, 58.f);
+    floorTxt.setPosition(220.f, 15.f);
     window.draw(floorTxt);
 
+    // form indicator
     std::string formName;
     std::string abilityDesc;
     sf::Color formColor;
@@ -793,6 +965,7 @@ void Game::drawHUD()
     abilTxt.setPosition(660.f, 36.f);
     window.draw(abilTxt);
 
+    // cooldown bar
     float cdBarW = 80.f, cdBarH = 4.f;
     float cdPct = player.getCooldownPercent();
     sf::RectangleShape cdBg(sf::Vector2f(cdBarW, cdBarH));
@@ -805,13 +978,12 @@ void Game::drawHUD()
     window.draw(cdBar);
 
     // buff icons
-    float buffStartY = 580.f;
     for (size_t i = 0; i < ownedBuffs.size() && i < 3; i++)
     {
         sf::RectangleShape bg(sf::Vector2f(18.f, 18.f));
-        bg.setPosition(15.f + i * 22.f, buffStartY);
-        bg.setFillColor(sf::Color(60, 60, 100));
-        bg.setOutlineColor(sf::Color(120, 120, 180));
+        bg.setPosition(660.f + i * 22.f, 64.f);
+        bg.setFillColor(sf::Color(50, 50, 80));
+        bg.setOutlineColor(sf::Color(100, 100, 160));
         bg.setOutlineThickness(1.f);
         window.draw(bg);
 
@@ -820,7 +992,7 @@ void Game::drawHUD()
         t.setCharacterSize(9);
         t.setFillColor(sf::Color(200, 200, 255));
         t.setString(ownedBuffs[i].name.substr(0, 3));
-        t.setPosition(16.f + i * 22.f, buffStartY + 3.f);
+        t.setPosition(661.f + i * 22.f, 67.f);
         window.draw(t);
     }
 }
@@ -839,19 +1011,19 @@ void Game::drawTitle()
     title.setFillColor(sf::Color::White);
     title.setString("TRANSFORM ARENA");
     sf::FloatRect b = title.getLocalBounds();
-    title.setPosition(400.f - b.width / 2.f, 100.f);
+    title.setPosition(400.f - b.width / 2.f, 80.f);
     window.draw(title);
 
     sf::Text sub;
     sub.setFont(font);
-    sub.setCharacterSize(16);
+    sub.setCharacterSize(15);
     sub.setFillColor(sf::Color(180, 180, 200));
     sub.setString("Clear rooms, defeat bosses, collect buffs across 3 floors");
     b = sub.getLocalBounds();
-    sub.setPosition(400.f - b.width / 2.f, 170.f);
+    sub.setPosition(400.f - b.width / 2.f, 145.f);
     window.draw(sub);
 
-    float yStart = 220.f;
+    float yStart = 190.f;
     const char* descs[] = {
         "[1] CIRCLE  -  Fast. Dash through enemies.",
         "[2] TRIANGLE  -  Ranged. Aim with mouse.",
@@ -867,29 +1039,29 @@ void Game::drawTitle()
     {
         sf::Text desc;
         desc.setFont(font);
-        desc.setCharacterSize(15);
+        desc.setCharacterSize(14);
         desc.setFillColor(colors[i]);
         desc.setString(descs[i]);
         b = desc.getLocalBounds();
-        desc.setPosition(400.f - b.width / 2.f, yStart + i * 28.f);
+        desc.setPosition(400.f - b.width / 2.f, yStart + i * 24.f);
         window.draw(desc);
     }
 
     sf::Text controls;
     controls.setFont(font);
-    controls.setCharacterSize(13);
-    controls.setFillColor(sf::Color(120, 120, 140));
-    controls.setString("WASD: Move  |  1/2/3: Transform  |  Space: Ability  |  Mouse: Aim (Triangle)");
+    controls.setCharacterSize(12);
+    controls.setFillColor(sf::Color(100, 100, 120));
+    controls.setString("WASD: Move | 1/2/3: Transform | Space: Ability | Mouse: Aim");
     b = controls.getLocalBounds();
-    controls.setPosition(400.f - b.width / 2.f, 340.f);
+    controls.setPosition(400.f - b.width / 2.f, 290.f);
     window.draw(controls);
 
-    // menu options
-    float menuY = 390.f;
+    // menu
+    float menuY = 340.f;
     sf::Text newGame;
     newGame.setFont(font);
-    newGame.setCharacterSize(20);
-    newGame.setFillColor(titleSelection == 0 ? sf::Color::White : sf::Color(100, 100, 120));
+    newGame.setCharacterSize(22);
+    newGame.setFillColor(titleSelection == 0 ? sf::Color::White : sf::Color(80, 80, 100));
     newGame.setString(titleSelection == 0 ? "> New Game" : "  New Game");
     b = newGame.getLocalBounds();
     newGame.setPosition(400.f - b.width / 2.f, menuY);
@@ -899,11 +1071,12 @@ void Game::drawTitle()
     {
         sf::Text cont;
         cont.setFont(font);
-        cont.setCharacterSize(20);
-        cont.setFillColor(titleSelection == 1 ? sf::Color::White : sf::Color(100, 100, 120));
-        cont.setString(titleSelection == 1 ? "> Continue (Floor " + std::to_string(saveData.floor) + ")" : "  Continue (Floor " + std::to_string(saveData.floor) + ")");
+        cont.setCharacterSize(22);
+        cont.setFillColor(titleSelection == 1 ? sf::Color::White : sf::Color(80, 80, 100));
+        std::string contStr = titleSelection == 1 ? "> Continue (Floor " + std::to_string(saveData.floor) + ")" : "  Continue (Floor " + std::to_string(saveData.floor) + ")";
+        cont.setString(contStr);
         b = cont.getLocalBounds();
-        cont.setPosition(400.f - b.width / 2.f, menuY + 28.f);
+        cont.setPosition(400.f - b.width / 2.f, menuY + 30.f);
         window.draw(cont);
     }
 
@@ -915,7 +1088,7 @@ void Game::drawTitle()
         hi.setFillColor(sf::Color(255, 220, 80));
         hi.setString("High Score: " + std::to_string(saveData.highScore) + "  |  Best Floor: " + std::to_string(saveData.highFloor));
         b = hi.getLocalBounds();
-        hi.setPosition(400.f - b.width / 2.f, 470.f);
+        hi.setPosition(400.f - b.width / 2.f, 440.f);
         window.draw(hi);
     }
 }
@@ -936,7 +1109,7 @@ void Game::drawGameOver()
     goText.setFillColor(won ? sf::Color(80, 255, 80) : sf::Color(220, 40, 40));
     goText.setString(won ? "YOU WIN!" : "GAME OVER");
     sf::FloatRect b = goText.getLocalBounds();
-    goText.setPosition(400.f - b.width / 2.f, 120.f);
+    goText.setPosition(400.f - b.width / 2.f, 100.f);
     window.draw(goText);
 
     sf::Text scoreTxt;
@@ -945,7 +1118,7 @@ void Game::drawGameOver()
     scoreTxt.setFillColor(sf::Color::White);
     scoreTxt.setString("Score: " + std::to_string(score));
     b = scoreTxt.getLocalBounds();
-    scoreTxt.setPosition(400.f - b.width / 2.f, 195.f);
+    scoreTxt.setPosition(400.f - b.width / 2.f, 170.f);
     window.draw(scoreTxt);
 
     int minutes = (int)playTime / 60;
@@ -954,22 +1127,23 @@ void Game::drawGameOver()
     std::string lines[] = {
         "Floor reached: " + std::to_string(currentFloor) + "/" + std::to_string(totalFloors),
         "Enemies killed: " + std::to_string(totalKills),
+        "Coins earned: " + std::to_string(coins),
         "Time played: " + std::to_string(minutes) + "m " + std::to_string(seconds) + "s",
         "Buffs collected: " + std::to_string((int)ownedBuffs.size())
     };
 
-    float statY = 235.f;
-    for (int i = 0; i < 4; i++)
+    float statY = 210.f;
+    for (int i = 0; i < 5; i++)
     {
         sf::Text t;
         t.setFont(font);
-        t.setCharacterSize(16);
+        t.setCharacterSize(15);
         t.setFillColor(sf::Color(180, 180, 200));
         t.setString(lines[i]);
         b = t.getLocalBounds();
         t.setPosition(400.f - b.width / 2.f, statY);
         window.draw(t);
-        statY += 24.f;
+        statY += 22.f;
     }
 
     if (saveData.highScore > 0)
@@ -1069,7 +1243,7 @@ void Game::drawRoomTransition()
 {
     float t = transitionTimer / 0.3f;
     sf::RectangleShape fade(sf::Vector2f(800.f, 600.f));
-    fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(180 * t)));
+    fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(200 * t)));
     window.draw(fade);
 }
 
@@ -1084,11 +1258,15 @@ void Game::restart()
     buffChoices.clear();
     choosingBuff = false;
     score = 0;
+    coins = 0;
     scoreMultiplier = 1;
     multiplierTimer = 0.f;
     damageCooldown = 0.f;
     totalKills = 0;
     playTime = 0.f;
+    armor = 3;
+    maxArmor = 3;
+    armorRegenTimer = 0.f;
     currentFloor = 1;
     shakeIntensity = 0.f;
     shakeTimer = 0.f;
@@ -1135,9 +1313,13 @@ void Game::loadGame()
     score = saveData.score;
     totalKills = saveData.totalKills;
     playTime = saveData.playTime;
+    coins = 0;
     scoreMultiplier = 1;
     multiplierTimer = 0.f;
     damageCooldown = 0.f;
+    armor = 3;
+    maxArmor = 3;
+    armorRegenTimer = 0.f;
     bossAlive = false;
     choosingBuff = false;
     ownedBuffs.clear();
@@ -1145,12 +1327,10 @@ void Game::loadGame()
 
     generateFloor();
 
-    // restore player state
     player.heal(saveData.health - player.getHealth());
     if (saveData.form == 1) player.transform(Form::Triangle);
     else if (saveData.form == 2) player.transform(Form::Square);
 
-    // rebuild buffs
     for (int id : saveData.buffIds)
     {
         Buff b;
@@ -1171,7 +1351,6 @@ void Game::loadGame()
         ownedBuffs.push_back(b);
     }
 
-    // apply buff multipliers
     float spd = 1.f, dmg = 1.f, cd = 1.f;
     for (auto& b : ownedBuffs)
     {
@@ -1204,43 +1383,12 @@ Buff Game::randomBuff()
     int type = std::rand() % 6;
     switch (type)
     {
-    case 0:
-        b.name = "Swift Feet";
-        b.desc = "+15% move speed";
-        b.id = 0;
-        b.speedBonus = 0.15f;
-        break;
-    case 1:
-        b.name = "Sharp Edge";
-        b.desc = "+20% damage";
-        b.id = 1;
-        b.damageBonus = 0.2f;
-        break;
-    case 2:
-        b.name = "Iron Skin";
-        b.desc = "+30 max health";
-        b.id = 2;
-        b.healthBonus = 30;
-        break;
-    case 3:
-        b.name = "Quick Hands";
-        b.desc = "-25% cooldowns";
-        b.id = 3;
-        b.cooldownReduction = 0.25f;
-        break;
-    case 4:
-        b.name = "Glass Cannon";
-        b.desc = "+40% dmg, -20 hp";
-        b.id = 4;
-        b.damageBonus = 0.4f;
-        b.healthBonus = -20;
-        break;
-    case 5:
-        b.name = "Vitality";
-        b.desc = "+50 max health";
-        b.id = 5;
-        b.healthBonus = 50;
-        break;
+    case 0: b.name = "Swift Feet"; b.desc = "+15% move speed"; b.id = 0; b.speedBonus = 0.15f; break;
+    case 1: b.name = "Sharp Edge"; b.desc = "+20% damage"; b.id = 1; b.damageBonus = 0.2f; break;
+    case 2: b.name = "Iron Skin"; b.desc = "+30 max health"; b.id = 2; b.healthBonus = 30; break;
+    case 3: b.name = "Quick Hands"; b.desc = "-25% cooldowns"; b.id = 3; b.cooldownReduction = 0.25f; break;
+    case 4: b.name = "Glass Cannon"; b.desc = "+40% dmg, -20 hp"; b.id = 4; b.damageBonus = 0.4f; b.healthBonus = -20; break;
+    case 5: b.name = "Vitality"; b.desc = "+50 max health"; b.id = 5; b.healthBonus = 50; break;
     }
     return b;
 }
@@ -1266,7 +1414,6 @@ void Game::applyBuff(const Buff& buff)
 
     ownedBuffs.push_back(buff);
 
-    // recalculate all multipliers from owned buffs
     float spd = 1.f, dmg = 1.f, cd = 1.f;
     for (auto& b : ownedBuffs)
     {

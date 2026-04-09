@@ -39,20 +39,24 @@ private:
     std::vector<HealthPickup> pickups;
     std::vector<DamageNumber> dmgNumbers;
 
-    static const int MAP_SIZE = 5;
-    Room rooms[MAP_SIZE][MAP_SIZE];
+    int mapSize;
+    static const int MAX_MAP = 7;
+    Room rooms[MAX_MAP][MAX_MAP];
     int currentRoomX, currentRoomY;
     int currentFloor;
     int totalFloors;
-    int bossRoomX, bossRoomY;
 
     GameState state;
     int score;
+    int coins;
     int scoreMultiplier;
     float multiplierTimer;
     float damageCooldown;
     int totalKills;
     float playTime;
+    int armor;
+    int maxArmor;
+    float armorRegenTimer;
 
     float shakeIntensity;
     float shakeTimer;
@@ -70,7 +74,7 @@ private:
 
     SaveData saveData;
     bool hasContinue;
-    int titleSelection; // 0=new game, 1=continue
+    int titleSelection;
 
     sf::Font font;
     bool fontLoaded;
@@ -80,10 +84,10 @@ private:
     void checkCollisions();
     void checkDoorTransition();
     void transitionToRoom(int dir);
+    void tryBuyShopItem(int index);
     void spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float size);
     void spawnDeathParticles(sf::Vector2f pos, EnemyType type);
     void addScreenShake(float intensity, float duration);
-    void drawBackground();
     void drawMinimap();
     void drawHUD();
     void drawBossBar();
