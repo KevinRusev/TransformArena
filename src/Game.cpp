@@ -100,18 +100,45 @@ void Game::generateFloor()
 
         // pick random free neighbor
         bool placed = false;
-        for (int attempts = 0; attempts < 20; attempts++)
+        bool isBossRoom = (i == roomCount - 1);
+        int minBossDist = 3;
+
+        for (int attempts = 0; attempts < 40; attempts++)
         {
-            int dir = std::rand() % 4;
+            // bias direction away from start for straighter paths
+            int dir;
+            if (attempts < 10 && i > 0)
+            {
+                int bestDir = -1;
+                int bestDist = -1;
+                for (int d = 0; d < 4; d++)
+                {
+                    int tx = cx + dxDir[d], ty = cy + dyDir[d];
+                    if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize || used[tx][ty]) continue;
+                    int md = std::abs(tx - startX) + std::abs(ty - startY);
+                    if (md > bestDist) { bestDist = md; bestDir = d; }
+                }
+                dir = (bestDir >= 0 && std::rand() % 3 != 0) ? bestDir : std::rand() % 4;
+            }
+            else
+                dir = std::rand() % 4;
+
             int nx = cx + dxDir[dir], ny = cy + dyDir[dir];
             if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize) continue;
             if (used[nx][ny]) continue;
+
+            // boss must be far from start (relax after 20 tries)
+            if (isBossRoom && attempts < 20)
+            {
+                int md = std::abs(nx - startX) + std::abs(ny - startY);
+                if (md < minBossDist) continue;
+            }
 
             rooms[cx][cy].setDoor(dir, true);
             rooms[nx][ny].setDoor((dir + 2) % 4, true);
 
             RoomType type = RoomType::Normal;
-            if (i == roomCount - 1)
+            if (isBossRoom)
                 type = RoomType::Boss;
             else if (i == shopTarget && shopPlaced < 0)
             {
