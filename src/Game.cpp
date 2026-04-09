@@ -12,6 +12,9 @@ Game::Game(sf::RenderWindow& win)
     , wave(0)
     , waveTimer(1.5f)
     , damageCooldown(0.f)
+    , shakeIntensity(0.f)
+    , shakeTimer(0.f)
+    , shakeOffset(0.f, 0.f)
     , fontLoaded(false)
 {
     std::srand((unsigned int)std::time(nullptr));
@@ -42,10 +45,34 @@ void Game::handleEvent(const sf::Event& event)
         player.transform(Form::Square);
     else if (event.key.code == sf::Keyboard::Space)
         player.useAbility();
+
+    if (player.justTransformed())
+    {
+        sf::Color c;
+        switch (player.getForm())
+        {
+        case Form::Circle:   c = sf::Color(80, 180, 255); break;
+        case Form::Triangle: c = sf::Color(255, 160, 40);  break;
+        case Form::Square:   c = sf::Color(80, 210, 80);   break;
+        }
+        spawnParticles(player.getPosition(), c, 20, 200.f, 5.f);
+    }
 }
 
 void Game::update(float dt)
 {
+    if (shakeTimer > 0.f)
+    {
+        shakeTimer -= dt;
+        float t = shakeTimer / 0.3f;
+        shakeOffset.x = ((float)(std::rand() % 100) / 100.f - 0.5f) * shakeIntensity * t * 2.f;
+        shakeOffset.y = ((float)(std::rand() % 100) / 100.f - 0.5f) * shakeIntensity * t * 2.f;
+    }
+    else
+    {
+        shakeOffset = sf::Vector2f(0.f, 0.f);
+    }
+
     if (!player.isAlive())
         return;
 
@@ -77,12 +104,18 @@ void Game::update(float dt)
     for (auto& proj : projectiles)
         proj.update(dt);
 
+    for (auto& p : particles)
+        p.update(dt);
+
     checkCollisions();
 
     for (auto& enemy : enemies)
     {
         if (!enemy.isAlive())
+        {
+            spawnDeathParticles(enemy.getPosition(), enemy.getType());
             score += 10;
+        }
     }
 
     enemies.erase(
@@ -93,13 +126,32 @@ void Game::update(float dt)
         std::remove_if(projectiles.begin(), projectiles.end(), [](const Projectile& p) { return !p.isAlive(); }),
         projectiles.end());
 
+    particles.erase(
+        std::remove_if(particles.begin(), particles.end(), [](const Particle& p) { return !p.isAlive(); }),
+        particles.end());
+
     if (damageCooldown > 0.f)
         damageCooldown -= dt;
+
+    if (!player.isAlive())
+    {
+        addScreenShake(12.f, 0.4f);
+        spawnParticles(player.getPosition(), sf::Color::White, 30, 250.f, 6.f);
+    }
 }
 
 void Game::draw()
 {
     window.clear(sf::Color(18, 18, 28));
+
+    sf::View view = window.getDefaultView();
+    view.move(shakeOffset);
+    window.setView(view);
+
+    drawBackground();
+
+    for (auto& p : particles)
+        p.draw(window);
 
     for (auto& enemy : enemies)
         enemy.draw(window);
@@ -108,6 +160,8 @@ void Game::draw()
         proj.draw(window);
 
     player.draw(window);
+
+    window.setView(window.getDefaultView());
 
     drawHUD();
 }
@@ -159,7 +213,10 @@ void Game::checkCollisions()
         {
             if (!enemy.isAlive()) continue;
             if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() + 10.f)
+            {
                 enemy.takeDamage(player.getDashDamage());
+                spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 6, 120.f, 3.f);
+            }
         }
     }
 
@@ -169,7 +226,10 @@ void Game::checkCollisions()
         {
             if (!enemy.isAlive()) continue;
             if (dist(pp, enemy.getPosition()) < player.getGroundPoundRadius() + enemy.getRadius())
+            {
                 enemy.takeDamage(player.getGroundPoundDamage());
+                addScreenShake(6.f, 0.2f);
+            }
         }
     }
 
@@ -183,12 +243,12 @@ void Game::checkCollisions()
             {
                 enemy.takeDamage(proj.damage);
                 proj.lifetime = 0.f;
+                spawnParticles(proj.position, sf::Color(255, 200, 60), 4, 80.f, 2.f);
                 break;
             }
         }
     }
 
-    // enemy projectiles hit player
     for (auto& proj : projectiles)
     {
         if (proj.fromPlayer || !proj.isAlive()) continue;
@@ -196,6 +256,8 @@ void Game::checkCollisions()
         {
             player.takeDamage((int)proj.damage);
             proj.lifetime = 0.f;
+            addScreenShake(4.f, 0.15f);
+            spawnParticles(proj.position, sf::Color(255, 80, 80), 5, 100.f, 3.f);
         }
     }
 
@@ -206,8 +268,66 @@ void Game::checkCollisions()
         {
             player.takeDamage(enemy.getContactDamage());
             damageCooldown = 0.4f;
+            addScreenShake(3.f, 0.1f);
         }
     }
+}
+
+void Game::spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float sz)
+{
+    for (int i = 0; i < count; i++)
+    {
+        float angle = (float)(std::rand() % 360) * 3.14159f / 180.f;
+        float spd = speed * (0.3f + (float)(std::rand() % 70) / 100.f);
+        sf::Vector2f vel(std::cos(angle) * spd, std::sin(angle) * spd);
+        float life = 0.3f + (float)(std::rand() % 40) / 100.f;
+        particles.emplace_back(pos, vel, color, life, sz);
+    }
+}
+
+void Game::spawnDeathParticles(sf::Vector2f pos, EnemyType type)
+{
+    sf::Color c;
+    int count;
+    switch (type)
+    {
+    case EnemyType::Chaser:  c = sf::Color(220, 60, 60);  count = 10; break;
+    case EnemyType::Brute:   c = sf::Color(160, 50, 180); count = 18; break;
+    case EnemyType::Shooter: c = sf::Color(220, 180, 40); count = 12; break;
+    }
+    spawnParticles(pos, c, count, 180.f, 4.f);
+}
+
+void Game::addScreenShake(float intensity, float duration)
+{
+    if (intensity > shakeIntensity)
+    {
+        shakeIntensity = intensity;
+        shakeTimer = duration;
+    }
+}
+
+void Game::drawBackground()
+{
+    float spacing = 40.f;
+    for (float x = spacing; x < 800.f; x += spacing)
+    {
+        for (float y = spacing; y < 600.f; y += spacing)
+        {
+            sf::CircleShape dot(1.2f);
+            dot.setOrigin(1.2f, 1.2f);
+            dot.setPosition(x, y);
+            dot.setFillColor(sf::Color(40, 40, 55));
+            window.draw(dot);
+        }
+    }
+
+    sf::RectangleShape border(sf::Vector2f(790.f, 590.f));
+    border.setPosition(5.f, 5.f);
+    border.setFillColor(sf::Color::Transparent);
+    border.setOutlineColor(sf::Color(50, 50, 70));
+    border.setOutlineThickness(2.f);
+    window.draw(border);
 }
 
 void Game::drawHUD()
@@ -291,14 +411,27 @@ void Game::drawHUD()
 
     if (!player.isAlive())
     {
+        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+        overlay.setFillColor(sf::Color(0, 0, 0, 180));
+        window.draw(overlay);
+
         sf::Text goText;
         goText.setFont(font);
         goText.setCharacterSize(48);
         goText.setFillColor(sf::Color(220, 40, 40));
         goText.setString("GAME OVER");
         sf::FloatRect b = goText.getLocalBounds();
-        goText.setPosition(400.f - b.width / 2.f, 250.f);
+        goText.setPosition(400.f - b.width / 2.f, 200.f);
         window.draw(goText);
+
+        sf::Text scoreFinal;
+        scoreFinal.setFont(font);
+        scoreFinal.setCharacterSize(24);
+        scoreFinal.setFillColor(sf::Color::White);
+        scoreFinal.setString("Score: " + std::to_string(score) + "   Wave: " + std::to_string(wave));
+        b = scoreFinal.getLocalBounds();
+        scoreFinal.setPosition(400.f - b.width / 2.f, 275.f);
+        window.draw(scoreFinal);
 
         sf::Text restartTxt;
         restartTxt.setFont(font);
@@ -306,7 +439,7 @@ void Game::drawHUD()
         restartTxt.setFillColor(sf::Color(180, 180, 180));
         restartTxt.setString("Press R to restart");
         b = restartTxt.getLocalBounds();
-        restartTxt.setPosition(400.f - b.width / 2.f, 310.f);
+        restartTxt.setPosition(400.f - b.width / 2.f, 330.f);
         window.draw(restartTxt);
     }
 
@@ -324,10 +457,14 @@ void Game::restart()
     player.reset(400.f, 300.f);
     enemies.clear();
     projectiles.clear();
+    particles.clear();
     score = 0;
     wave = 0;
     waveTimer = 1.5f;
     damageCooldown = 0.f;
+    shakeIntensity = 0.f;
+    shakeTimer = 0.f;
+    shakeOffset = sf::Vector2f(0.f, 0.f);
 }
 
 float Game::dist(sf::Vector2f a, sf::Vector2f b)

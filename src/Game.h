@@ -4,6 +4,7 @@
 #include "Player.h"
 #include "Enemy.h"
 #include "Projectile.h"
+#include "Particle.h"
 
 class Game
 {
@@ -19,17 +20,26 @@ private:
     Player player;
     std::vector<Enemy> enemies;
     std::vector<Projectile> projectiles;
+    std::vector<Particle> particles;
 
     int score;
     int wave;
     float waveTimer;
     float damageCooldown;
 
+    float shakeIntensity;
+    float shakeTimer;
+    sf::Vector2f shakeOffset;
+
     sf::Font font;
     bool fontLoaded;
 
     void spawnWave();
     void checkCollisions();
+    void spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float size);
+    void spawnDeathParticles(sf::Vector2f pos, EnemyType type);
+    void addScreenShake(float intensity, float duration);
+    void drawBackground();
     void drawHUD();
     void restart();
 
