@@ -24,6 +24,7 @@ private:
     std::vector<Projectile> projectiles;
     std::vector<Particle> particles;
     std::vector<HealthPickup> pickups;
+    std::vector<DamageNumber> dmgNumbers;
 
     GameState state;
     int score;

@@ -162,9 +162,11 @@ void Game::update(float dt)
     for (auto& p : particles)
         p.update(dt);
 
-    // update pickups
     for (auto& hp : pickups)
         hp.update(dt);
+
+    for (auto& dn : dmgNumbers)
+        dn.update(dt);
 
     checkCollisions();
 
@@ -205,6 +207,10 @@ void Game::update(float dt)
     pickups.erase(
         std::remove_if(pickups.begin(), pickups.end(), [](const HealthPickup& h) { return !h.isAlive(); }),
         pickups.end());
+
+    dmgNumbers.erase(
+        std::remove_if(dmgNumbers.begin(), dmgNumbers.end(), [](const DamageNumber& d) { return !d.isAlive(); }),
+        dmgNumbers.end());
 
     // multiplier decay
     if (multiplierTimer > 0.f)
@@ -249,6 +255,12 @@ void Game::draw()
         proj.draw(window);
 
     player.draw(window);
+
+    if (fontLoaded)
+    {
+        for (auto& dn : dmgNumbers)
+            dn.draw(window, font);
+    }
 
     // reset view for HUD (HUD shouldn't shake)
     window.setView(window.getDefaultView());
@@ -318,6 +330,7 @@ void Game::checkCollisions()
             {
                 enemy.takeDamage(player.getDashDamage());
                 enemy.markDashHit();
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getDashDamage(), sf::Color(80, 180, 255));
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 6, 120.f, 3.f);
             }
         }
@@ -332,6 +345,7 @@ void Game::checkCollisions()
             if (d < player.getGroundPoundRadius() + enemy.getRadius())
             {
                 enemy.takeDamage(player.getGroundPoundDamage());
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getGroundPoundDamage(), sf::Color(80, 210, 80));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
                 enemy.pushAway(pp, knockback);
             }
@@ -350,6 +364,7 @@ void Game::checkCollisions()
             if (dist(proj.position, enemy.getPosition()) < proj.radius + enemy.getRadius())
             {
                 enemy.takeDamage(proj.damage);
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)proj.damage, sf::Color(255, 200, 60));
                 proj.lifetime = 0.f;
                 spawnParticles(proj.position, sf::Color(255, 200, 60), 4, 80.f, 2.f);
                 break;
@@ -672,6 +687,7 @@ void Game::restart()
     projectiles.clear();
     particles.clear();
     pickups.clear();
+    dmgNumbers.clear();
     score = 0;
     scoreMultiplier = 1;
     multiplierTimer = 0.f;

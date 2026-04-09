@@ -1,5 +1,42 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <string>
+
+struct DamageNumber
+{
+    sf::Vector2f position;
+    float lifetime;
+    int value;
+    sf::Color color;
+
+    DamageNumber(sf::Vector2f pos, int val, sf::Color col)
+        : position(pos), lifetime(0.8f), value(val), color(col) {}
+
+    void update(float dt)
+    {
+        position.y -= 50.f * dt;
+        lifetime -= dt;
+    }
+
+    bool isAlive() const { return lifetime > 0.f; }
+
+    void draw(sf::RenderWindow& window, const sf::Font& font) const
+    {
+        float t = lifetime / 0.8f;
+        float scale = 0.8f + 0.4f * (1.f - t);
+        sf::Text txt;
+        txt.setFont(font);
+        txt.setCharacterSize((unsigned int)(14 * scale));
+        txt.setString(std::to_string(value));
+        sf::FloatRect b = txt.getLocalBounds();
+        txt.setOrigin(b.width / 2.f, b.height / 2.f);
+        txt.setPosition(position);
+        sf::Color c = color;
+        c.a = (sf::Uint8)(255 * t);
+        txt.setFillColor(c);
+        window.draw(txt);
+    }
+};
 
 struct Particle
 {
