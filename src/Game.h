@@ -7,6 +7,7 @@
 #include "Projectile.h"
 #include "Particle.h"
 #include "Room.h"
+#include "Item.h"
 #include "SaveData.h"
 
 enum class GameState { Title, Playing, GameOver, BossIntro };
@@ -72,6 +73,9 @@ private:
     std::vector<Buff> buffChoices;
     bool choosingBuff;
 
+    Item equippedItem;
+    float barrierTimer;
+
     SaveData saveData;
     bool hasContinue;
     int titleSelection;
@@ -85,6 +89,7 @@ private:
     void checkDoorTransition();
     void transitionToRoom(int dir);
     void tryBuyShopItem(int index);
+    void activateItem();
     void spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float size);
     void spawnDeathParticles(sf::Vector2f pos, EnemyType type);
     void addScreenShake(float intensity, float duration);

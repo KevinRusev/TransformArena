@@ -18,6 +18,7 @@ Game::Game(sf::RenderWindow& win)
     , transitionTimer(0.f), transitionDir(-1)
     , bossAlive(false), bossIntroTimer(0.f)
     , choosingBuff(false)
+    , barrierTimer(0.f)
     , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
 {
@@ -274,7 +275,9 @@ void Game::handleEvent(const sf::Event& event)
                 tryBuyShopItem(2);
         }
 
-        if (event.key.code == sf::Keyboard::Num1 && !currentRoom().isShopRoom())
+        if (event.key.code == sf::Keyboard::E)
+            activateItem();
+        else if (event.key.code == sf::Keyboard::Num1 && !currentRoom().isShopRoom())
             player.transform(Form::Circle);
         else if (event.key.code == sf::Keyboard::Num2 && !currentRoom().isShopRoom())
             player.transform(Form::Triangle);
@@ -319,16 +322,10 @@ void Game::tryBuyShopItem(int index)
     coins -= item.cost;
     item.sold = true;
 
-    switch (item.type)
-    {
-    case 0: player.heal((int)item.value); break;
-    case 1: player.addMaxHealth((int)item.value); break;
-    case 2: player.setSpeedMultiplier(player.getSpeedMultiplier() + item.value); break;
-    case 3: player.setDamageMultiplier(player.getDamageMultiplier() + item.value); break;
-    case 4: player.setCooldownMultiplier(std::max(0.3f, player.getCooldownMultiplier() - item.value)); break;
-    }
+    equippedItem = item;
+    equippedItem.cooldownTimer = 0.f;
 
-    spawnParticles(player.getPosition(), sf::Color(255, 220, 80), 15, 150.f, 4.f);
+    spawnParticles(player.getPosition(), sf::Color(255, 220, 80), 20, 180.f, 5.f);
 }
 
 void Game::update(float dt)
@@ -405,6 +402,12 @@ void Game::update(float dt)
             armorRegenTimer = 0.f;
         }
     }
+
+    if (equippedItem.cooldownTimer > 0.f)
+        equippedItem.cooldownTimer -= dt;
+
+    if (barrierTimer > 0.f)
+        barrierTimer -= dt;
 
     if (player.wantsToShoot())
     {
@@ -648,6 +651,15 @@ void Game::checkCollisions()
     for (auto& proj : projectiles)
     {
         if (proj.fromPlayer || !proj.isAlive()) continue;
+
+        // barrier shield blocks enemy projectiles near the player
+        if (barrierTimer > 0.f && dist(proj.position, pp) < pr + 50.f)
+        {
+            proj.lifetime = 0.f;
+            spawnParticles(proj.position, sf::Color(100, 160, 255), 4, 80.f, 2.f);
+            continue;
+        }
+
         if (dist(proj.position, pp) < proj.radius + pr)
         {
             if (!player.isInvincible())
@@ -723,6 +735,19 @@ void Game::draw()
         proj.draw(window);
 
     player.draw(window);
+
+    if (barrierTimer > 0.f)
+    {
+        float alpha = std::min(1.f, barrierTimer) * 0.4f;
+        float pr = player.getRadius();
+        sf::CircleShape shield(pr + 30.f);
+        shield.setOrigin(pr + 30.f, pr + 30.f);
+        shield.setPosition(player.getPosition());
+        shield.setFillColor(sf::Color(60, 120, 255, (sf::Uint8)(80 * alpha)));
+        shield.setOutlineColor(sf::Color(100, 160, 255, (sf::Uint8)(200 * alpha)));
+        shield.setOutlineThickness(2.f);
+        window.draw(shield);
+    }
 
     if (fontLoaded)
     {
@@ -1026,11 +1051,52 @@ void Game::drawHUD()
     cdBar.setFillColor(cdPct >= 1.f ? sf::Color(255, 255, 255) : formColor);
     window.draw(cdBar);
 
-    // buff icons
+    // equipped item display
+    if (equippedItem.type != ItemType::None)
+    {
+        sf::RectangleShape itemBg(sf::Vector2f(36.f, 36.f));
+        itemBg.setPosition(660.f, 64.f);
+        itemBg.setFillColor(sf::Color(30, 30, 50));
+        itemBg.setOutlineColor(sf::Color(120, 120, 180));
+        itemBg.setOutlineThickness(1.5f);
+        window.draw(itemBg);
+
+        Item::drawIcon(window, equippedItem.type, 678.f, 82.f, 1.f);
+
+        // item cooldown overlay
+        float itemCdPct = equippedItem.getCooldownPercent();
+        if (itemCdPct < 1.f)
+        {
+            float overlayH = 36.f * (1.f - itemCdPct);
+            sf::RectangleShape cdOverlay(sf::Vector2f(36.f, overlayH));
+            cdOverlay.setPosition(660.f, 64.f);
+            cdOverlay.setFillColor(sf::Color(0, 0, 0, 150));
+            window.draw(cdOverlay);
+        }
+
+        sf::Text itemKey;
+        itemKey.setFont(font);
+        itemKey.setCharacterSize(10);
+        itemKey.setFillColor(equippedItem.isReady() ? sf::Color(120, 255, 120) : sf::Color(120, 120, 140));
+        itemKey.setString("[E]");
+        itemKey.setPosition(668.f, 101.f);
+        window.draw(itemKey);
+
+        sf::Text itemName;
+        itemName.setFont(font);
+        itemName.setCharacterSize(10);
+        itemName.setFillColor(sf::Color(180, 180, 200));
+        itemName.setString(equippedItem.name);
+        itemName.setPosition(700.f, 68.f);
+        window.draw(itemName);
+    }
+
+    // buff icons below item
+    float buffY = equippedItem.type != ItemType::None ? 118.f : 64.f;
     for (size_t i = 0; i < ownedBuffs.size() && i < 3; i++)
     {
         sf::RectangleShape bg(sf::Vector2f(18.f, 18.f));
-        bg.setPosition(660.f + i * 22.f, 64.f);
+        bg.setPosition(660.f + i * 22.f, buffY);
         bg.setFillColor(sf::Color(50, 50, 80));
         bg.setOutlineColor(sf::Color(100, 100, 160));
         bg.setOutlineThickness(1.f);
@@ -1041,7 +1107,7 @@ void Game::drawHUD()
         t.setCharacterSize(9);
         t.setFillColor(sf::Color(200, 200, 255));
         t.setString(ownedBuffs[i].name.substr(0, 3));
-        t.setPosition(661.f + i * 22.f, 67.f);
+        t.setPosition(661.f + i * 22.f, buffY + 3.f);
         window.draw(t);
     }
 }
@@ -1067,7 +1133,7 @@ void Game::drawTitle()
     sub.setFont(font);
     sub.setCharacterSize(15);
     sub.setFillColor(sf::Color(180, 180, 200));
-    sub.setString("Clear rooms, defeat bosses, collect buffs across 3 floors");
+    sub.setString("Clear rooms, defeat bosses, buy weapons across 3 floors");
     b = sub.getLocalBounds();
     sub.setPosition(400.f - b.width / 2.f, 145.f);
     window.draw(sub);
@@ -1100,7 +1166,7 @@ void Game::drawTitle()
     controls.setFont(font);
     controls.setCharacterSize(12);
     controls.setFillColor(sf::Color(100, 100, 120));
-    controls.setString("WASD: Move | 1/2/3: Transform | Space: Ability | Mouse: Aim");
+    controls.setString("WASD: Move | 1/2/3: Transform | Space: Ability | E: Item | Mouse: Aim");
     b = controls.getLocalBounds();
     controls.setPosition(400.f - b.width / 2.f, 290.f);
     window.draw(controls);
@@ -1173,12 +1239,13 @@ void Game::drawGameOver()
     int minutes = (int)playTime / 60;
     int seconds = (int)playTime % 60;
 
+    std::string weaponStr = equippedItem.type != ItemType::None ? equippedItem.name : "None";
     std::string lines[] = {
         "Floor reached: " + std::to_string(currentFloor) + "/" + std::to_string(totalFloors),
         "Enemies killed: " + std::to_string(totalKills),
         "Coins earned: " + std::to_string(coins),
         "Time played: " + std::to_string(minutes) + "m " + std::to_string(seconds) + "s",
-        "Buffs collected: " + std::to_string((int)ownedBuffs.size())
+        "Weapon: " + weaponStr
     };
 
     float statY = 210.f;
@@ -1306,6 +1373,8 @@ void Game::restart()
     ownedBuffs.clear();
     buffChoices.clear();
     choosingBuff = false;
+    equippedItem = Item();
+    barrierTimer = 0.f;
     score = 0;
     coins = 0;
     scoreMultiplier = 1;
@@ -1348,6 +1417,7 @@ void Game::saveGame()
     saveData.health = player.getHealth();
     saveData.maxHealth = player.getMaxHealth();
     saveData.form = (int)player.getForm();
+    saveData.equippedItemType = (int)equippedItem.type;
 
     saveData.buffIds.clear();
     for (auto& b : ownedBuffs)
@@ -1369,10 +1439,16 @@ void Game::loadGame()
     armor = 3;
     maxArmor = 3;
     armorRegenTimer = 0.f;
+    barrierTimer = 0.f;
     bossAlive = false;
     choosingBuff = false;
     ownedBuffs.clear();
     buffChoices.clear();
+
+    if (saveData.equippedItemType > 0 && saveData.equippedItemType <= 5)
+        equippedItem = Item::create((ItemType)saveData.equippedItemType, currentFloor);
+    else
+        equippedItem = Item();
 
     generateFloor();
 
@@ -1479,6 +1555,150 @@ void Game::applyBuff(const Buff& buff)
         player.addMaxHealth(buff.healthBonus);
 
     player.heal(30);
+}
+
+void Game::activateItem()
+{
+    if (!equippedItem.isReady()) return;
+    equippedItem.cooldownTimer = equippedItem.cooldown;
+
+    sf::Vector2f pp = player.getPosition();
+    auto& enemies = currentRoom().getEnemies();
+
+    switch (equippedItem.type)
+    {
+    case ItemType::FlameRing:
+    {
+        float radius = 130.f;
+        float dmg = 40.f * player.getDamageMultiplier();
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            if (dist(pp, enemy.getPosition()) < radius + enemy.getRadius())
+            {
+                enemy.takeDamage(dmg);
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(255, 120, 30));
+                enemy.pushAway(pp, 60.f);
+            }
+        }
+        spawnParticles(pp, sf::Color(255, 120, 30), 30, 250.f, 5.f);
+        spawnParticles(pp, sf::Color(255, 60, 20), 20, 180.f, 4.f);
+        addScreenShake(5.f, 0.2f);
+        break;
+    }
+    case ItemType::FrostShard:
+    {
+        sf::Vector2f dir = player.getFacing();
+        float bulletSpeed = 600.f;
+        float dmg = 35.f * player.getDamageMultiplier();
+        float spreadAngle = 0.25f;
+
+        for (int i = -1; i <= 1; i++)
+        {
+            float angle = std::atan2(dir.y, dir.x) + i * spreadAngle;
+            sf::Vector2f vel(std::cos(angle) * bulletSpeed, std::sin(angle) * bulletSpeed);
+            Projectile p(pp, vel, 6.f, dmg, true, sf::Color(100, 220, 255));
+            p.lifetime = 2.f;
+            projectiles.push_back(p);
+        }
+        spawnParticles(pp, sf::Color(100, 220, 255), 10, 120.f, 3.f);
+        break;
+    }
+    case ItemType::ThunderStrike:
+    {
+        float dmg = 55.f * player.getDamageMultiplier();
+        int targets = 3;
+        int hit = 0;
+
+        // sort enemies by distance, zap closest 3
+        for (int t = 0; t < targets; t++)
+        {
+            float closestDist = 99999.f;
+            int closestIdx = -1;
+            for (size_t i = 0; i < enemies.size(); i++)
+            {
+                if (!enemies[i].isAlive()) continue;
+                float d = dist(pp, enemies[i].getPosition());
+                if (d < closestDist && d < 350.f)
+                {
+                    bool alreadyHit = false;
+                    for (auto& dn : dmgNumbers)
+                    {
+                        if (dist(dn.position, enemies[i].getPosition()) < 5.f && dn.lifetime > 0.75f)
+                        { alreadyHit = true; break; }
+                    }
+                    if (!alreadyHit)
+                    {
+                        closestDist = d;
+                        closestIdx = (int)i;
+                    }
+                }
+            }
+            if (closestIdx >= 0)
+            {
+                enemies[closestIdx].takeDamage(dmg);
+                dmgNumbers.emplace_back(enemies[closestIdx].getPosition(), (int)dmg, sf::Color(255, 240, 60));
+                spawnParticles(enemies[closestIdx].getPosition(), sf::Color(255, 240, 60), 12, 200.f, 3.f);
+                hit++;
+            }
+        }
+        if (hit > 0) addScreenShake(4.f, 0.15f);
+        spawnParticles(pp, sf::Color(255, 240, 60), 8, 100.f, 3.f);
+        break;
+    }
+    case ItemType::ShadowDash:
+    {
+        sf::Vector2f dir = player.getFacing();
+        float teleportDist = 200.f;
+        float dmg = 30.f * player.getDamageMultiplier();
+        sf::Vector2f target = pp + dir * teleportDist;
+
+        // clamp within walls
+        float wall = 30.f;
+        if (target.x < wall) target.x = wall;
+        if (target.x > 800.f - wall) target.x = 800.f - wall;
+        if (target.y < wall) target.y = wall;
+        if (target.y > 600.f - wall) target.y = 600.f - wall;
+
+        // damage enemies along the path
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            sf::Vector2f ep = enemy.getPosition();
+            // check if enemy is near the line from pp to target
+            sf::Vector2f line = target - pp;
+            float len = std::sqrt(line.x * line.x + line.y * line.y);
+            if (len < 1.f) continue;
+            sf::Vector2f n(-line.y / len, line.x / len);
+            float perpDist = std::abs((ep.x - pp.x) * n.x + (ep.y - pp.y) * n.y);
+            float projDist = ((ep.x - pp.x) * line.x + (ep.y - pp.y) * line.y) / len;
+            if (perpDist < enemy.getRadius() + 25.f && projDist > -20.f && projDist < len + 20.f)
+            {
+                enemy.takeDamage(dmg);
+                dmgNumbers.emplace_back(ep, (int)dmg, sf::Color(160, 60, 220));
+            }
+        }
+
+        // trail particles
+        for (float s = 0.f; s < 8.f; s++)
+        {
+            float t = s / 8.f;
+            sf::Vector2f tp = pp + (target - pp) * t;
+            spawnParticles(tp, sf::Color(160, 60, 220, 180), 3, 60.f, 3.f);
+        }
+
+        player.setPosition(target.x, target.y);
+        addScreenShake(3.f, 0.1f);
+        break;
+    }
+    case ItemType::BarrierShield:
+    {
+        barrierTimer = 3.f;
+        spawnParticles(pp, sf::Color(100, 160, 255), 15, 120.f, 3.f);
+        break;
+    }
+    default: break;
+    }
 }
 
 void Game::spawnParticles(sf::Vector2f pos, sf::Color color, int count, float speed, float sz)
