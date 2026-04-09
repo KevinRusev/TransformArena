@@ -3,12 +3,12 @@
 #include "Projectile.h"
 #include <vector>
 
-enum class EnemyType { Chaser, Brute, Shooter };
+enum class EnemyType { Chaser, Brute, Shooter, Dasher, Shielder };
 
 class Enemy
 {
 public:
-    Enemy(float x, float y, EnemyType type, bool isBoss = false);
+    Enemy(float x, float y, EnemyType type, bool isBoss = false, int bossType = 0);
 
     void update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& projectiles);
     void draw(sf::RenderWindow& window);
@@ -19,6 +19,7 @@ public:
     float getMaxHealth() const;
     bool isAlive() const;
     bool isBoss() const;
+    int getBossType() const;
     int getContactDamage() const;
     EnemyType getType() const;
 
@@ -26,6 +27,12 @@ public:
     void pushAway(sf::Vector2f from, float force);
     bool canBeDashHit() const;
     void markDashHit();
+
+    bool isShieldUp() const;
+    void breakShield(float duration);
+    bool isStunned() const;
+    void stun(float duration);
+    void setPosition(float x, float y);
 
 private:
     sf::Vector2f position;
@@ -45,4 +52,21 @@ private:
     float shootInterval;
     float preferredRange;
     bool bossFlag;
+    int bossTypeId;
+
+    // boss-specific state
+    bool shieldUp;
+    float shieldBreakTimer;
+    float shieldAngle;
+    bool stunned;
+    float stunnedTimer;
+    float teleportTimer;
+    float bossPhaseTimer;
+    int bossPhase;
+
+    // dasher enemy state
+    bool dashCharging;
+    float dashChargeTimer;
+    sf::Vector2f dashDir;
+    float dashSpeed;
 };

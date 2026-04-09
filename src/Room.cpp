@@ -60,19 +60,19 @@ void Room::spawnEnemies()
 
     if (roomType == RoomType::Boss)
     {
-        // different boss types per floor
-        EnemyType bossType = EnemyType::Brute;
-        if (floorNum == 2) bossType = EnemyType::Shooter;
-        if (floorNum >= 3) bossType = EnemyType::Brute;
+        // unique boss per floor
+        EnemyType bossShape = EnemyType::Brute;
+        int bossId = floorNum;
+        if (floorNum == 2) bossShape = EnemyType::Chaser;
+        if (floorNum >= 3) bossShape = EnemyType::Brute;
 
-        enemies.emplace_back(400.f, 200.f, bossType, true);
+        enemies.emplace_back(400.f, 200.f, bossShape, true, bossId);
 
-        int minions = 3 + floorNum * 2;
+        int minions = 2 + floorNum;
         for (int i = 0; i < minions; i++)
         {
             float ex = 100.f + (float)(std::rand() % 600);
             float ey = 80.f + (float)(std::rand() % 400);
-            // avoid spawning on top of boss
             float ddx = ex - 400.f, ddy = ey - 200.f;
             if (std::sqrt(ddx * ddx + ddy * ddy) < 80.f)
                 ex += 150.f;
@@ -81,7 +81,7 @@ void Room::spawnEnemies()
             int roll = std::rand() % 3;
             if (roll == 0) mt = EnemyType::Shooter;
             else if (roll == 1) mt = EnemyType::Chaser;
-            else mt = EnemyType::Brute;
+            else mt = EnemyType::Dasher;
             enemies.emplace_back(ex, ey, mt);
         }
         return;
@@ -90,7 +90,7 @@ void Room::spawnEnemies()
     if (roomType == RoomType::Shop || roomType == RoomType::Start)
         return;
 
-    int baseCount = 3 + floorNum * 2;
+    int baseCount = 3 + floorNum;
     int count = baseCount + std::rand() % 3;
 
     for (int i = 0; i < count; i++)
@@ -110,17 +110,25 @@ void Room::spawnEnemies()
         int roll = std::rand() % 100;
 
         if (floorNum == 1)
-            type = (roll < 70) ? EnemyType::Chaser : EnemyType::Shooter;
+        {
+            if (roll < 50) type = EnemyType::Chaser;
+            else if (roll < 80) type = EnemyType::Shooter;
+            else type = EnemyType::Dasher;
+        }
         else if (floorNum == 2)
         {
-            if (roll < 35) type = EnemyType::Chaser;
-            else if (roll < 65) type = EnemyType::Shooter;
+            if (roll < 25) type = EnemyType::Chaser;
+            else if (roll < 45) type = EnemyType::Shooter;
+            else if (roll < 65) type = EnemyType::Dasher;
+            else if (roll < 85) type = EnemyType::Shielder;
             else type = EnemyType::Brute;
         }
         else
         {
-            if (roll < 25) type = EnemyType::Chaser;
-            else if (roll < 55) type = EnemyType::Shooter;
+            if (roll < 15) type = EnemyType::Chaser;
+            else if (roll < 35) type = EnemyType::Shooter;
+            else if (roll < 55) type = EnemyType::Dasher;
+            else if (roll < 75) type = EnemyType::Shielder;
             else type = EnemyType::Brute;
         }
 

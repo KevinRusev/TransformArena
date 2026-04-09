@@ -2,7 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 
-Enemy::Enemy(float x, float y, EnemyType type, bool isBoss)
+Enemy::Enemy(float x, float y, EnemyType type, bool isBoss, int bossType)
     : position(x, y)
     , velocity(0.f, 0.f)
     , knockbackVel(0.f, 0.f)
@@ -13,6 +13,19 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss)
     , shootInterval(1.5f)
     , preferredRange(250.f)
     , bossFlag(isBoss)
+    , bossTypeId(bossType)
+    , shieldUp(false)
+    , shieldBreakTimer(0.f)
+    , shieldAngle(0.f)
+    , stunned(false)
+    , stunnedTimer(0.f)
+    , teleportTimer(3.f)
+    , bossPhaseTimer(0.f)
+    , bossPhase(0)
+    , dashCharging(false)
+    , dashChargeTimer(0.f)
+    , dashDir(0.f, 0.f)
+    , dashSpeed(0.f)
 {
     switch (type)
     {
@@ -36,17 +49,52 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss)
         shootInterval = 1.2f;
         preferredRange = 250.f;
         break;
+    case EnemyType::Dasher:
+        speed = 90.f;
+        size = 13.f;
+        health = 35.f;
+        contactDamage = 15;
+        dashSpeed = 500.f;
+        break;
+    case EnemyType::Shielder:
+        speed = 45.f;
+        size = 18.f;
+        health = 80.f;
+        contactDamage = 12;
+        shieldUp = true;
+        break;
     }
     maxHealth = health;
 
     if (bossFlag)
     {
-        health *= 5.f;
-        maxHealth = health;
         size *= 2.f;
-        speed *= 1.2f;
         contactDamage *= 2;
-        shootInterval = 1.8f;
+        shootInterval = 2.f;
+
+        switch (bossTypeId)
+        {
+        case 1: // Guardian
+            health = 500.f;
+            speed = 70.f;
+            shieldUp = true;
+            break;
+        case 2: // Phantom
+            health = 350.f;
+            speed = 160.f;
+            teleportTimer = 3.f;
+            break;
+        case 3: // Hive
+            health = 600.f;
+            speed = 40.f;
+            shootInterval = 1.5f;
+            break;
+        default:
+            health *= 5.f;
+            speed *= 1.2f;
+            break;
+        }
+        maxHealth = health;
     }
 
     shootTimer = (float)(std::rand() % 100) / 100.f * shootInterval;
@@ -65,74 +113,255 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
 
     float currentSpeed = speed;
 
-    switch (type)
+    if (stunned)
     {
-    case EnemyType::Chaser:
-        // straight chase, speed up slightly when close
-        if (dist < 120.f)
-            currentSpeed = speed * 1.3f;
-        position.x += dir.x * currentSpeed * dt;
-        position.y += dir.y * currentSpeed * dt;
-        break;
+        stunnedTimer -= dt;
+        if (stunnedTimer <= 0.f) stunned = false;
+        currentSpeed = speed * 0.15f;
+    }
 
-    case EnemyType::Brute:
+    if (shieldBreakTimer > 0.f)
     {
-        if (bossFlag)
+        shieldBreakTimer -= dt;
+        if (shieldBreakTimer <= 0.f && bossFlag && bossTypeId == 1)
+            shieldUp = true;
+    }
+
+    if (bossFlag)
+        shieldAngle += dt * 120.f;
+
+    // --- BOSS BEHAVIOR ---
+    if (bossFlag && bossTypeId == 1) // Guardian
+    {
+        if (dist < 200.f)
+            currentSpeed = speed * 2.2f;
+
+        float wobble = std::sin(bossPhaseTimer * 2.f) * 0.3f;
+        position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
+        position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+
+        bossPhaseTimer += dt;
+        shootTimer -= dt;
+        if (shootTimer <= 0.f && !stunned)
         {
-            // boss brute: aggressive chase, charge when close
-            if (dist < 200.f)
-                currentSpeed = speed * 2.5f;
-            else
-                currentSpeed = speed * 1.2f;
+            shootTimer = shootInterval;
+            float bulletSpeed = 170.f;
+            float baseAngle = std::atan2(dir.y, dir.x);
 
-            // strafe slightly to be less predictable
-            float wobble = std::sin(position.x * 0.02f + position.y * 0.02f) * 0.3f;
-            position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
-            position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+            if (health / maxHealth < 0.5f)
+            {
+                // rage: wider spread + ring
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = baseAngle - 0.8f + 1.6f * ((float)i / 7.f);
+                    sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                    projectiles.emplace_back(position, bv, 5.f, 15.f, false, sf::Color(180, 80, 255));
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    float a = baseAngle - 0.4f + 0.8f * ((float)i / 4.f);
+                    sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                    projectiles.emplace_back(position, bv, 5.f, 12.f, false, sf::Color(160, 60, 220));
+                }
+            }
+        }
+    }
+    else if (bossFlag && bossTypeId == 2) // Phantom
+    {
+        if (!stunned)
+        {
+            teleportTimer -= dt;
+            if (teleportTimer <= 0.f)
+            {
+                teleportTimer = 2.5f + (float)(std::rand() % 150) / 100.f;
+                float nx = 80.f + (float)(std::rand() % 640);
+                float ny = 80.f + (float)(std::rand() % 440);
+                position.x = nx;
+                position.y = ny;
+            }
+
+            // fast erratic movement
+            float zigzag = std::sin(bossPhaseTimer * 5.f);
+            position.x += (dir.x * 0.3f + dir.y * zigzag * 0.7f) * currentSpeed * dt;
+            position.y += (dir.y * 0.3f - dir.x * zigzag * 0.7f) * currentSpeed * dt;
         }
         else
         {
-            if (dist < 150.f)
-                currentSpeed = speed * 2.f;
-            float wobble = std::sin(position.x * 0.03f + position.y * 0.03f) * 0.2f;
-            position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
-            position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
-        }
-        break;
-    }
-
-    case EnemyType::Shooter:
-    {
-        // try to maintain distance from player
-        if (dist < preferredRange - 40.f)
-        {
-            // too close, back away
-            position.x -= dir.x * currentSpeed * dt;
-            position.y -= dir.y * currentSpeed * dt;
-        }
-        else if (dist > preferredRange + 40.f)
-        {
-            // too far, approach
             position.x += dir.x * currentSpeed * dt;
             position.y += dir.y * currentSpeed * dt;
         }
-        else
+
+        bossPhaseTimer += dt;
+        shootTimer -= dt;
+        if (shootTimer <= 0.f)
         {
-            // circle strafe at preferred range
-            position.x += dir.y * currentSpeed * 0.5f * dt;
-            position.y -= dir.x * currentSpeed * 0.5f * dt;
+            shootTimer = stunned ? shootInterval * 2.f : shootInterval;
+            float bulletSpeed = 220.f;
+
+            // burst of 3 aimed shots
+            for (int burst = 0; burst < 3; burst++)
+            {
+                float spread = ((float)burst - 1.f) * 0.2f;
+                float a = std::atan2(dir.y, dir.x) + spread;
+                sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(80, 255, 180));
+            }
+
+            if (health / maxHealth < 0.4f && !stunned)
+            {
+                // extra ring when low HP
+                for (int i = 0; i < 10; i++)
+                {
+                    float a = (float)i / 10.f * 6.2832f;
+                    sf::Vector2f bv(std::cos(a) * 160.f, std::sin(a) * 160.f);
+                    projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(60, 220, 160));
+                }
+            }
         }
+    }
+    else if (bossFlag && bossTypeId == 3) // Hive
+    {
+        position.x += dir.x * currentSpeed * dt;
+        position.y += dir.y * currentSpeed * dt;
+
+        bossPhaseTimer += dt;
+        shootTimer -= dt;
+
+        float hpPct = health / maxHealth;
+        float actualInterval = hpPct < 0.5f ? shootInterval * 0.6f : shootInterval;
+
+        if (shootTimer <= 0.f)
+        {
+            shootTimer = actualInterval;
+            float bulletSpeed = 150.f;
+
+            // ring of bullets
+            int count = hpPct < 0.5f ? 16 : 10;
+            float offset = bossPhaseTimer * 0.5f;
+            for (int i = 0; i < count; i++)
+            {
+                float a = offset + (float)i / count * 6.2832f;
+                sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                projectiles.emplace_back(position, bv, 5.f, 12.f, false, sf::Color(255, 160, 40));
+            }
+        }
+    }
+    else if (bossFlag) // generic boss fallback
+    {
+        if (dist < 200.f) currentSpeed = speed * 2.5f;
+        position.x += dir.x * currentSpeed * dt;
+        position.y += dir.y * currentSpeed * dt;
 
         shootTimer -= dt;
-        if (shootTimer <= 0.f && dist < 400.f)
+        if (shootTimer <= 0.f)
         {
             shootTimer = shootInterval;
-            float bulletSpeed = 200.f;
-            sf::Vector2f bulletVel(dir.x * bulletSpeed, dir.y * bulletSpeed);
-            projectiles.emplace_back(position, bulletVel, 5.f, 12.f, false, sf::Color(255, 100, 100));
+            float baseAngle = std::atan2(dir.y, dir.x);
+            for (int i = 0; i < 5; i++)
+            {
+                float a = baseAngle - 0.4f + 0.8f * ((float)i / 4.f);
+                sf::Vector2f bv(std::cos(a) * 180.f, std::sin(a) * 180.f);
+                projectiles.emplace_back(position, bv, 5.f, 12.f, false, sf::Color(255, 80, 80));
+            }
         }
-        break;
     }
+    // --- REGULAR ENEMY BEHAVIOR ---
+    else
+    {
+        switch (type)
+        {
+        case EnemyType::Chaser:
+            if (dist < 120.f) currentSpeed = speed * 1.3f;
+            position.x += dir.x * currentSpeed * dt;
+            position.y += dir.y * currentSpeed * dt;
+            break;
+
+        case EnemyType::Brute:
+        {
+            if (dist < 150.f) currentSpeed = speed * 2.f;
+            float wobble = std::sin(position.x * 0.03f + position.y * 0.03f) * 0.2f;
+            position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;
+            position.y += (dir.y - wobble * dir.x) * currentSpeed * dt;
+            break;
+        }
+
+        case EnemyType::Shooter:
+        {
+            if (dist < preferredRange - 40.f)
+            {
+                position.x -= dir.x * currentSpeed * dt;
+                position.y -= dir.y * currentSpeed * dt;
+            }
+            else if (dist > preferredRange + 40.f)
+            {
+                position.x += dir.x * currentSpeed * dt;
+                position.y += dir.y * currentSpeed * dt;
+            }
+            else
+            {
+                position.x += dir.y * currentSpeed * 0.5f * dt;
+                position.y -= dir.x * currentSpeed * 0.5f * dt;
+            }
+
+            shootTimer -= dt;
+            if (shootTimer <= 0.f && dist < 400.f)
+            {
+                shootTimer = shootInterval;
+                float bulletSpeed = 200.f;
+                sf::Vector2f bulletVel(dir.x * bulletSpeed, dir.y * bulletSpeed);
+                projectiles.emplace_back(position, bulletVel, 5.f, 12.f, false, sf::Color(255, 100, 100));
+            }
+            break;
+        }
+
+        case EnemyType::Dasher:
+        {
+            if (dashCharging)
+            {
+                dashChargeTimer -= dt;
+                if (dashChargeTimer <= 0.f)
+                {
+                    dashCharging = false;
+                    dashChargeTimer = 2.f + (float)(std::rand() % 200) / 100.f;
+                }
+                else
+                {
+                    position.x += dashDir.x * dashSpeed * dt;
+                    position.y += dashDir.y * dashSpeed * dt;
+                }
+            }
+            else
+            {
+                // circle around player, then charge
+                position.x += dir.y * currentSpeed * 0.6f * dt;
+                position.y -= dir.x * currentSpeed * 0.6f * dt;
+                if (dist > 300.f)
+                {
+                    position.x += dir.x * currentSpeed * dt;
+                    position.y += dir.y * currentSpeed * dt;
+                }
+
+                dashChargeTimer -= dt;
+                if (dashChargeTimer <= 0.f && dist < 350.f)
+                {
+                    dashCharging = true;
+                    dashChargeTimer = 0.3f;
+                    dashDir = dir;
+                }
+            }
+            break;
+        }
+
+        case EnemyType::Shielder:
+        {
+            position.x += dir.x * currentSpeed * dt;
+            position.y += dir.y * currentSpeed * dt;
+            break;
+        }
+        }
     }
 
     // clamp all enemies inside room walls
@@ -142,42 +371,6 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
     if (position.y - size < wall) position.y = wall + size;
     if (position.y + size > 600.f - wall) position.y = 600.f - wall - size;
 
-    // boss shooting: spread of projectiles on a timer
-    if (bossFlag)
-    {
-        shootTimer -= dt;
-        if (shootTimer <= 0.f && dist < 500.f)
-        {
-            shootTimer = shootInterval;
-            float bulletSpeed = 180.f;
-            int numBullets = 5 + (int)(maxHealth / 200.f);
-            float hpPct = health / maxHealth;
-
-            if (hpPct < 0.4f)
-            {
-                // rage mode: ring of bullets
-                for (int i = 0; i < 12; i++)
-                {
-                    float angle = (float)i / 12.f * 6.2832f;
-                    sf::Vector2f bv(std::cos(angle) * bulletSpeed, std::sin(angle) * bulletSpeed);
-                    projectiles.emplace_back(position, bv, 5.f, 15.f, false, sf::Color(255, 60, 60));
-                }
-            }
-            else
-            {
-                // spread shot toward player
-                float baseAngle = std::atan2(dir.y, dir.x);
-                float spread = 0.6f;
-                for (int i = 0; i < numBullets; i++)
-                {
-                    float a = baseAngle - spread / 2.f + spread * ((float)i / (numBullets - 1));
-                    sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
-                    projectiles.emplace_back(position, bv, 5.f, 12.f, false, sf::Color(255, 80, 80));
-                }
-            }
-        }
-    }
-
     // apply and decay knockback
     position.x += knockbackVel.x * dt;
     position.y += knockbackVel.y * dt;
@@ -186,10 +379,8 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
     if (std::abs(knockbackVel.x) < 1.f) knockbackVel.x = 0.f;
     if (std::abs(knockbackVel.y) < 1.f) knockbackVel.y = 0.f;
 
-    if (hitFlash > 0.f)
-        hitFlash -= dt;
-    if (dashHitCooldown > 0.f)
-        dashHitCooldown -= dt;
+    if (hitFlash > 0.f) hitFlash -= dt;
+    if (dashHitCooldown > 0.f) dashHitCooldown -= dt;
 }
 
 void Enemy::draw(sf::RenderWindow& window)
@@ -197,24 +388,103 @@ void Enemy::draw(sf::RenderWindow& window)
     sf::Color color;
     switch (type)
     {
-    case EnemyType::Chaser:  color = sf::Color(220, 60, 60);   break;
-    case EnemyType::Brute:   color = sf::Color(160, 50, 180);  break;
-    case EnemyType::Shooter: color = sf::Color(220, 180, 40);  break;
+    case EnemyType::Chaser:   color = sf::Color(220, 60, 60);   break;
+    case EnemyType::Brute:    color = sf::Color(160, 50, 180);  break;
+    case EnemyType::Shooter:  color = sf::Color(220, 180, 40);  break;
+    case EnemyType::Dasher:   color = sf::Color(255, 100, 60);  break;
+    case EnemyType::Shielder: color = sf::Color(60, 160, 200);  break;
     }
 
     if (hitFlash > 0.f)
         color = sf::Color(255, 255, 255);
 
+    // boss visuals
     if (bossFlag)
     {
-        float glowSize = size * 1.5f;
-        sf::CircleShape glow(glowSize);
+        // glow
+        float glowSize = size * 1.6f;
+        sf::CircleShape glow(glowSize, 32);
         glow.setOrigin(glowSize, glowSize);
         glow.setPosition(position);
-        glow.setFillColor(sf::Color(255, 40, 40, 30));
+
+        if (bossTypeId == 1) // Guardian - purple glow
+            glow.setFillColor(sf::Color(140, 40, 200, 35));
+        else if (bossTypeId == 2) // Phantom - green glow
+            glow.setFillColor(sf::Color(40, 200, 120, 35));
+        else if (bossTypeId == 3) // Hive - orange glow
+            glow.setFillColor(sf::Color(200, 120, 30, 35));
+        else
+            glow.setFillColor(sf::Color(255, 40, 40, 30));
         window.draw(glow);
+
+        // Guardian shield rings
+        if (bossTypeId == 1 && shieldUp)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                float r = size + 10.f + i * 8.f;
+                float angle = shieldAngle + i * 45.f;
+                sf::CircleShape shield(r, 6);
+                shield.setOrigin(r, r);
+                shield.setPosition(position);
+                shield.setRotation(angle);
+                shield.setFillColor(sf::Color::Transparent);
+                shield.setOutlineColor(sf::Color(180, 100, 255, 160 - i * 40));
+                shield.setOutlineThickness(2.5f);
+                window.draw(shield);
+            }
+        }
+
+        // Phantom afterimage when not stunned
+        if (bossTypeId == 2 && !stunned)
+        {
+            for (int i = 1; i <= 3; i++)
+            {
+                sf::CircleShape ghost(size * (1.f - i * 0.1f), 3);
+                ghost.setOrigin(ghost.getRadius(), ghost.getRadius());
+                float ox = std::sin(bossPhaseTimer * 3.f + i) * 10.f;
+                float oy = std::cos(bossPhaseTimer * 3.f + i) * 10.f;
+                ghost.setPosition(position.x + ox, position.y + oy);
+                ghost.setFillColor(sf::Color(60, 200, 140, 60 - i * 15));
+                window.draw(ghost);
+            }
+        }
+
+        // Phantom stun indicator
+        if (bossTypeId == 2 && stunned)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                float a = bossPhaseTimer * 4.f + i * 2.094f;
+                float ox = std::cos(a) * (size + 8.f);
+                float oy = std::sin(a) * (size + 8.f);
+                sf::CircleShape star(4.f, 4);
+                star.setOrigin(4.f, 4.f);
+                star.setPosition(position.x + ox, position.y - size - 5.f + oy * 0.3f);
+                star.setFillColor(sf::Color(255, 255, 100));
+                window.draw(star);
+            }
+        }
+
+        // Hive orbiting particles
+        if (bossTypeId == 3)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                float a = bossPhaseTimer * 1.5f + i * 1.047f;
+                float r = size + 15.f;
+                float ox = std::cos(a) * r;
+                float oy = std::sin(a) * r;
+                sf::CircleShape orb(4.f);
+                orb.setOrigin(4.f, 4.f);
+                orb.setPosition(position.x + ox, position.y + oy);
+                orb.setFillColor(sf::Color(255, 180, 60, 180));
+                window.draw(orb);
+            }
+        }
     }
 
+    // health bar (non-boss only)
     if (health < maxHealth && !bossFlag)
     {
         float barWidth = size * 2.2f;
@@ -234,6 +504,7 @@ void Enemy::draw(sf::RenderWindow& window)
         window.draw(hpBar);
     }
 
+    // draw enemy body shape
     switch (type)
     {
     case EnemyType::Chaser:
@@ -257,7 +528,6 @@ void Enemy::draw(sf::RenderWindow& window)
         shape.setOutlineThickness(2.5f);
         window.draw(shape);
 
-        // inner cross marking
         sf::RectangleShape cross1(sf::Vector2f(size * 1.2f, 3.f));
         cross1.setOrigin(size * 0.6f, 1.5f);
         cross1.setPosition(position);
@@ -272,7 +542,6 @@ void Enemy::draw(sf::RenderWindow& window)
     }
     case EnemyType::Shooter:
     {
-        // diamond with inner dot (looks like an eye)
         sf::ConvexShape shape(4);
         shape.setPoint(0, sf::Vector2f(0.f, -size * 1.2f));
         shape.setPoint(1, sf::Vector2f(size, 0.f));
@@ -291,11 +560,67 @@ void Enemy::draw(sf::RenderWindow& window)
         window.draw(eye);
         break;
     }
+    case EnemyType::Dasher:
+    {
+        sf::Vector2f fDir = dashCharging ? dashDir : sf::Vector2f(dir.x, dir.y);
+        float angle = std::atan2(fDir.y, fDir.x) * 57.3f + 90.f;
+        sf::ConvexShape shape(3);
+        shape.setPoint(0, sf::Vector2f(0.f, -size * 1.3f));
+        shape.setPoint(1, sf::Vector2f(-size, size * 0.8f));
+        shape.setPoint(2, sf::Vector2f(size, size * 0.8f));
+        shape.setPosition(position);
+        shape.setRotation(angle);
+        shape.setFillColor(color);
+        shape.setOutlineColor(sf::Color(200, 60, 30));
+        shape.setOutlineThickness(1.5f);
+        window.draw(shape);
+
+        // charge warning flash
+        if (dashCharging)
+        {
+            sf::CircleShape flash(size * 1.3f);
+            flash.setOrigin(size * 1.3f, size * 1.3f);
+            flash.setPosition(position);
+            flash.setFillColor(sf::Color(255, 100, 40, 60));
+            window.draw(flash);
+        }
+        break;
+    }
+    case EnemyType::Shielder:
+    {
+        sf::CircleShape shape(size, 5);
+        shape.setOrigin(size, size);
+        shape.setPosition(position);
+        shape.setFillColor(color);
+        shape.setOutlineColor(sf::Color(40, 120, 180));
+        shape.setOutlineThickness(2.f);
+        window.draw(shape);
+
+        if (shieldUp)
+        {
+            sf::CircleShape shieldVis(size + 6.f, 5);
+            shieldVis.setOrigin(size + 6.f, size + 6.f);
+            shieldVis.setPosition(position);
+            shieldVis.setFillColor(sf::Color::Transparent);
+            shieldVis.setOutlineColor(sf::Color(100, 200, 255, 140));
+            shieldVis.setOutlineThickness(2.f);
+            window.draw(shieldVis);
+        }
+        break;
+    }
     }
 }
 
 void Enemy::takeDamage(float amount)
 {
+    // Shielder enemies: shield absorbs 60% damage
+    if (type == EnemyType::Shielder && shieldUp && !bossFlag)
+        amount *= 0.4f;
+
+    // Guardian boss: shield absorbs 80% damage
+    if (bossFlag && bossTypeId == 1 && shieldUp)
+        amount *= 0.2f;
+
     health -= amount;
     hitFlash = 0.1f;
 }
@@ -310,18 +635,32 @@ void Enemy::pushAway(sf::Vector2f from, float force)
         dir.y /= d;
         if (force < 20.f)
         {
-            // small nudge for separation - apply directly
             position.x += dir.x * force;
             position.y += dir.y * force;
         }
         else
         {
-            // big hit like ground pound - smooth slide via velocity
             knockbackVel.x += dir.x * force * 8.f;
             knockbackVel.y += dir.y * force * 8.f;
         }
     }
 }
+
+void Enemy::breakShield(float duration)
+{
+    shieldUp = false;
+    shieldBreakTimer = duration;
+}
+
+void Enemy::stun(float duration)
+{
+    stunned = true;
+    stunnedTimer = duration;
+}
+
+void Enemy::setPosition(float x, float y) { position = sf::Vector2f(x, y); }
+bool Enemy::isShieldUp() const { return shieldUp; }
+bool Enemy::isStunned() const { return stunned; }
 
 bool Enemy::canBeDashHit() const { return dashHitCooldown <= 0.f; }
 void Enemy::markDashHit() { dashHitCooldown = 0.3f; }
@@ -332,5 +671,6 @@ float Enemy::getHealth() const { return health; }
 float Enemy::getMaxHealth() const { return maxHealth; }
 bool Enemy::isAlive() const { return health > 0.f; }
 bool Enemy::isBoss() const { return bossFlag; }
+int Enemy::getBossType() const { return bossTypeId; }
 int Enemy::getContactDamage() const { return contactDamage; }
 EnemyType Enemy::getType() const { return type; }
