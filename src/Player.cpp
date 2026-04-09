@@ -148,34 +148,83 @@ void Player::draw(sf::RenderWindow& window)
             bodyColor.a = 120;
     }
 
-    // ground pound shockwave ring
+    // ground pound shockwave - multiple expanding rings
     if (groundPounding)
     {
         float progress = 1.f - (poundTimer / poundDuration);
-        float ringSize = poundRadius * progress;
-        sf::CircleShape ring(ringSize);
-        ring.setOrigin(ringSize, ringSize);
-        ring.setPosition(position);
-        sf::Uint8 alpha = (sf::Uint8)(180 * (1.f - progress));
-        ring.setFillColor(sf::Color(80, 210, 80, (sf::Uint8)(alpha / 3)));
-        ring.setOutlineColor(sf::Color(150, 255, 150, alpha));
-        ring.setOutlineThickness(3.f);
-        window.draw(ring);
+
+        for (int r = 0; r < 3; r++)
+        {
+            float rProgress = progress - r * 0.15f;
+            if (rProgress < 0.f) continue;
+            if (rProgress > 1.f) rProgress = 1.f;
+
+            float ringSize = poundRadius * rProgress;
+            sf::CircleShape ring(ringSize, 32);
+            ring.setOrigin(ringSize, ringSize);
+            ring.setPosition(position);
+            sf::Uint8 alpha = (sf::Uint8)(160 * (1.f - rProgress));
+            ring.setFillColor(sf::Color(80, 210, 80, (sf::Uint8)(alpha / 4)));
+            ring.setOutlineColor(sf::Color(150, 255, 150, alpha));
+            ring.setOutlineThickness(2.5f - r * 0.5f);
+            window.draw(ring);
+        }
+
+        // ground cracks radiating outward
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = i * 0.7854f;
+            float len = poundRadius * progress * 0.8f;
+            sf::RectangleShape crack(sf::Vector2f(len, 2.f));
+            crack.setOrigin(0.f, 1.f);
+            crack.setPosition(position);
+            crack.setRotation(angle * 57.3f);
+            sf::Uint8 a = (sf::Uint8)(120 * (1.f - progress));
+            crack.setFillColor(sf::Color(200, 255, 200, a));
+            window.draw(crack);
+        }
     }
 
-    // dash trail effect
+    // dash trail - streak with afterimages
     if (dashing)
     {
-        for (int i = 1; i <= 4; i++)
+        float dashProgress = 1.f - (dashTimer / dashDuration);
+
+        // bright speed line behind player
+        sf::RectangleShape streak(sf::Vector2f(size * 4.f * dashProgress, size * 0.6f));
+        streak.setOrigin(streak.getSize().x, streak.getSize().y / 2.f);
+        float angle = std::atan2(facing.y, facing.x) * 57.3f;
+        streak.setPosition(position);
+        streak.setRotation(angle);
+        streak.setFillColor(sf::Color(120, 200, 255, (sf::Uint8)(150 * (1.f - dashProgress))));
+        window.draw(streak);
+
+        // afterimage circles
+        for (int i = 1; i <= 5; i++)
         {
-            float offset = (float)i * 12.f;
-            sf::CircleShape trail(size * (1.f - i * 0.15f));
-            trail.setOrigin(trail.getRadius(), trail.getRadius());
+            float offset = (float)i * 10.f;
+            float s = size * (1.f - i * 0.12f);
+            sf::CircleShape trail(s);
+            trail.setOrigin(s, s);
             trail.setPosition(position.x - facing.x * offset, position.y - facing.y * offset);
-            sf::Uint8 a = (sf::Uint8)(100 - i * 20);
+            sf::Uint8 a = (sf::Uint8)(120 - i * 22);
             trail.setFillColor(sf::Color(80, 180, 255, a));
             window.draw(trail);
         }
+    }
+
+    // triangle muzzle flash when shooting
+    if (currentForm == Form::Triangle && shootTimer > shootCooldown * 0.7f)
+    {
+        float flashT = (shootTimer - shootCooldown * 0.7f) / (shootCooldown * 0.3f);
+        float flashSize = 8.f + 12.f * flashT;
+        sf::CircleShape flash(flashSize, 6);
+        flash.setOrigin(flashSize, flashSize);
+        float tipX = position.x + facing.x * size * 1.4f;
+        float tipY = position.y + facing.y * size * 1.4f;
+        flash.setPosition(tipX, tipY);
+        flash.setFillColor(sf::Color(255, 220, 80, (sf::Uint8)(200 * flashT)));
+        window.draw(flash);
     }
 
     switch (currentForm)
