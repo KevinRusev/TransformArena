@@ -19,7 +19,7 @@ Game::Game(sf::RenderWindow& win)
     , bossAlive(false), bossIntroTimer(0.f)
     , portalActive(false), portalPulse(0.f), portalPos(400.f, 300.f)
     , floorFadeTimer(0.f), floorFadeDir(0.f)
-    , choosingBuff(false)
+    , choosingBuff(false), buffChoiceTimer(0.f)
     , barrierTimer(0.f)
     , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
@@ -377,7 +377,13 @@ void Game::update(float dt)
         return;
     }
 
-    if (state != GameState::Playing || choosingBuff)
+    if (choosingBuff)
+    {
+        buffChoiceTimer += dt;
+        return;
+    }
+
+    if (state != GameState::Playing)
         return;
 
     if (transitionTimer > 0.f)
@@ -551,11 +557,11 @@ void Game::update(float dt)
         portalPos = sf::Vector2f(400.f, 300.f);
     }
 
-    if (portalActive)
+    if (portalActive && currentRoom().isBossRoom())
         portalPulse += dt;
 
-    // player enters portal
-    if (portalActive && !choosingBuff && dist(player.getPosition(), portalPos) < 35.f)
+    // player enters portal (only in boss room)
+    if (portalActive && currentRoom().isBossRoom() && !choosingBuff && dist(player.getPosition(), portalPos) < 35.f)
     {
         if (currentFloor >= totalFloors)
         {
@@ -571,6 +577,7 @@ void Game::update(float dt)
         {
             generateBuffChoices();
             choosingBuff = true;
+            buffChoiceTimer = 0.f;
         }
     }
 
@@ -667,7 +674,8 @@ void Game::checkCollisions()
                 enemy.takeDamage(player.getDashDamage());
                 enemy.markDashHit();
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getDashDamage(), sf::Color(80, 180, 255));
-                spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 6, 120.f, 3.f);
+                spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
+                spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
             }
         }
     }
@@ -684,9 +692,12 @@ void Game::checkCollisions()
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getGroundPoundDamage(), sf::Color(80, 210, 80));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
                 enemy.pushAway(pp, knockback);
+                spawnParticles(enemy.getPosition(), sf::Color(80, 210, 80), 8, 140.f, 3.f);
             }
         }
-        addScreenShake(6.f, 0.2f);
+        spawnParticles(pp, sf::Color(100, 255, 100), 20, 200.f, 4.f);
+        spawnParticles(pp, sf::Color(200, 255, 200), 10, 100.f, 2.f);
+        addScreenShake(8.f, 0.25f);
     }
 
     for (auto& proj : projectiles)
@@ -700,7 +711,7 @@ void Game::checkCollisions()
                 enemy.takeDamage(proj.damage);
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)proj.damage, sf::Color(255, 200, 60));
                 proj.lifetime = 0.f;
-                spawnParticles(proj.position, sf::Color(255, 200, 60), 4, 80.f, 2.f);
+                spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
                 break;
             }
         }
@@ -789,7 +800,7 @@ void Game::draw()
 
     currentRoom().draw(window);
 
-    if (portalActive)
+    if (portalActive && currentRoom().isBossRoom())
         drawPortal();
 
     for (auto& proj : projectiles)
@@ -1352,17 +1363,26 @@ void Game::drawBuffChoice()
 {
     if (!fontLoaded) return;
 
+    // black bg fades in over 0.4s
+    float bgFade = buffChoiceTimer / 0.4f;
+    if (bgFade > 1.f) bgFade = 1.f;
+
     sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-    overlay.setFillColor(sf::Color(0, 0, 0, 160));
+    overlay.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(220 * bgFade)));
     window.draw(overlay);
+
+    if (bgFade < 0.6f) return;
+
+    float contentAlpha = (bgFade - 0.6f) / 0.4f;
+    if (contentAlpha > 1.f) contentAlpha = 1.f;
 
     sf::Text title;
     title.setFont(font);
     title.setCharacterSize(32);
-    title.setFillColor(sf::Color(255, 220, 80));
+    title.setFillColor(sf::Color(255, 220, 80, (sf::Uint8)(255 * contentAlpha)));
     title.setString("CHOOSE A BUFF");
     sf::FloatRect b = title.getLocalBounds();
-    title.setPosition(400.f - b.width / 2.f, 80.f);
+    title.setPosition(400.f - b.width / 2.f, 70.f);
     window.draw(title);
 
     if (ownedBuffs.size() >= 3)
@@ -1370,51 +1390,78 @@ void Game::drawBuffChoice()
         sf::Text full;
         full.setFont(font);
         full.setCharacterSize(14);
-        full.setFillColor(sf::Color(255, 100, 100));
+        full.setFillColor(sf::Color(255, 100, 100, (sf::Uint8)(255 * contentAlpha)));
         full.setString("(Max 3 buffs - new buff replaces oldest)");
         b = full.getLocalBounds();
-        full.setPosition(400.f - b.width / 2.f, 120.f);
+        full.setPosition(400.f - b.width / 2.f, 110.f);
         window.draw(full);
     }
 
     for (size_t i = 0; i < buffChoices.size(); i++)
     {
-        float cardX = 120.f + i * 220.f;
-        float cardY = 170.f;
-        float cardW = 180.f, cardH = 260.f;
+        // each card pops in with delay: card 0 at 0.5s, card 1 at 0.7s, card 2 at 0.9s
+        float cardDelay = 0.5f + i * 0.2f;
+        float cardT = (buffChoiceTimer - cardDelay) / 0.3f;
+        if (cardT < 0.f) continue;
+        if (cardT > 1.f) cardT = 1.f;
+
+        // ease out bounce
+        float scale;
+        if (cardT < 0.6f)
+            scale = cardT / 0.6f * 1.1f;
+        else
+            scale = 1.1f - (cardT - 0.6f) / 0.4f * 0.1f;
+
+        float cardW = 180.f * scale, cardH = 260.f * scale;
+        float baseX = 120.f + i * 220.f;
+        float baseY = 170.f;
+        float cardX = baseX + 90.f - cardW / 2.f;
+        float cardY = baseY + 130.f - cardH / 2.f;
+
+        sf::Uint8 cardAlpha = (sf::Uint8)(255 * std::min(1.f, cardT * 2.f));
 
         sf::RectangleShape card(sf::Vector2f(cardW, cardH));
         card.setPosition(cardX, cardY);
-        card.setFillColor(sf::Color(30, 30, 50));
-        card.setOutlineColor(sf::Color(120, 120, 180));
+        card.setFillColor(sf::Color(30, 30, 50, cardAlpha));
+        card.setOutlineColor(sf::Color(120, 120, 180, cardAlpha));
         card.setOutlineThickness(2.f);
         window.draw(card);
 
+        // glow behind card
+        sf::RectangleShape glow(sf::Vector2f(cardW + 8.f, cardH + 8.f));
+        glow.setPosition(cardX - 4.f, cardY - 4.f);
+        glow.setFillColor(sf::Color(80, 60, 160, (sf::Uint8)(30 * cardT)));
+        window.draw(glow);
+        window.draw(card);
+
+        float cx = baseX + 90.f;
+        float cy = baseY + 130.f;
+
         sf::Text numTxt;
         numTxt.setFont(font);
-        numTxt.setCharacterSize(28);
-        numTxt.setFillColor(sf::Color(255, 220, 80));
+        numTxt.setCharacterSize((unsigned int)(28 * scale));
+        numTxt.setFillColor(sf::Color(255, 220, 80, cardAlpha));
         numTxt.setString("[" + std::to_string(i + 1) + "]");
         b = numTxt.getLocalBounds();
-        numTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 15.f);
+        numTxt.setPosition(cx - b.width / 2.f, cardY + 15.f * scale);
         window.draw(numTxt);
 
         sf::Text nameTxt;
         nameTxt.setFont(font);
-        nameTxt.setCharacterSize(16);
-        nameTxt.setFillColor(sf::Color::White);
+        nameTxt.setCharacterSize((unsigned int)(16 * scale));
+        nameTxt.setFillColor(sf::Color(255, 255, 255, cardAlpha));
         nameTxt.setString(buffChoices[i].name);
         b = nameTxt.getLocalBounds();
-        nameTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 70.f);
+        nameTxt.setPosition(cx - b.width / 2.f, cardY + 70.f * scale);
         window.draw(nameTxt);
 
         sf::Text descTxt;
         descTxt.setFont(font);
-        descTxt.setCharacterSize(12);
-        descTxt.setFillColor(sf::Color(160, 160, 180));
+        descTxt.setCharacterSize((unsigned int)(12 * scale));
+        descTxt.setFillColor(sf::Color(160, 160, 180, cardAlpha));
         descTxt.setString(buffChoices[i].desc);
         b = descTxt.getLocalBounds();
-        descTxt.setPosition(cardX + cardW / 2.f - b.width / 2.f, cardY + 110.f);
+        descTxt.setPosition(cx - b.width / 2.f, cardY + 110.f * scale);
         window.draw(descTxt);
     }
 }
@@ -1534,6 +1581,7 @@ void Game::restart()
     ownedBuffs.clear();
     buffChoices.clear();
     choosingBuff = false;
+    buffChoiceTimer = 0.f;
     equippedItem = Item();
     barrierTimer = 0.f;
     score = 0;
@@ -1746,9 +1794,11 @@ void Game::activateItem()
                 enemy.pushAway(pp, 60.f);
             }
         }
-        spawnParticles(pp, sf::Color(255, 120, 30), 30, 250.f, 5.f);
-        spawnParticles(pp, sf::Color(255, 60, 20), 20, 180.f, 4.f);
-        addScreenShake(5.f, 0.2f);
+        // large fire burst effect
+        spawnParticles(pp, sf::Color(255, 120, 30), 40, 300.f, 6.f);
+        spawnParticles(pp, sf::Color(255, 60, 20), 25, 200.f, 5.f);
+        spawnParticles(pp, sf::Color(255, 200, 60), 15, 150.f, 3.f);
+        addScreenShake(7.f, 0.25f);
         break;
     }
     case ItemType::FrostShard:
@@ -1766,7 +1816,9 @@ void Game::activateItem()
             p.lifetime = 2.f;
             projectiles.push_back(p);
         }
-        spawnParticles(pp, sf::Color(100, 220, 255), 10, 120.f, 3.f);
+        spawnParticles(pp, sf::Color(100, 220, 255), 20, 160.f, 4.f);
+        spawnParticles(pp, sf::Color(200, 240, 255), 10, 80.f, 2.f);
+        addScreenShake(3.f, 0.1f);
         break;
     }
     case ItemType::ThunderStrike:

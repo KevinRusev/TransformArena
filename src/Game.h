@@ -79,6 +79,7 @@ private:
     std::vector<Buff> ownedBuffs;
     std::vector<Buff> buffChoices;
     bool choosingBuff;
+    float buffChoiceTimer;
 
     Item equippedItem;
     float barrierTimer;
