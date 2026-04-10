@@ -712,6 +712,8 @@ void Game::checkCollisions()
             if (dist(pp, enemy.getPosition()) < pr + enemy.getRadius() + 10.f)
             {
                 float dmg = player.getDashDamage();
+                bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                if (effective) dmg *= 1.5f;
 
                 // Phantom boss: dash deals bonus damage and briefly slows
                 if (enemy.isBoss() && enemy.getBossType() == 2)
@@ -725,7 +727,7 @@ void Game::checkCollisions()
                 enemy.takeDamage(dmg);
                 enemy.markDashHit();
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
-                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
                 spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
@@ -753,9 +755,12 @@ void Game::checkCollisions()
                 if (enemy.getType() == EnemyType::Shielder && enemy.isShieldUp())
                     enemy.breakShield(3.f);
 
-                enemy.takeDamage(player.getGroundPoundDamage());
-                dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getGroundPoundDamage(), sf::Color(80, 210, 80));
-                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                float slamDmg = player.getGroundPoundDamage();
+                bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                if (effective) slamDmg *= 1.5f;
+                enemy.takeDamage(slamDmg);
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)slamDmg, sf::Color(80, 210, 80));
+                if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
                 enemy.pushAway(pp, knockback);
@@ -775,9 +780,12 @@ void Game::checkCollisions()
             if (!enemy.isAlive()) continue;
             if (dist(proj.position, enemy.getPosition()) < proj.radius + enemy.getRadius())
             {
-                enemy.takeDamage(proj.damage);
-                dmgNumbers.emplace_back(enemy.getPosition(), (int)proj.damage, sf::Color(255, 200, 60));
-                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                float projDmg = proj.damage;
+                bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                if (effective) projDmg *= 1.5f;
+                enemy.takeDamage(projDmg);
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)projDmg, sf::Color(255, 200, 60));
+                if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 proj.lifetime = 0.f;
                 spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
