@@ -80,9 +80,10 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss, int bossType)
             shieldUp = true;
             break;
         case 2: // Phantom
-            health = 350.f;
-            speed = 160.f;
-            teleportTimer = 3.f;
+            health = 450.f;
+            speed = 180.f;
+            teleportTimer = 1.8f;
+            shootInterval = 1.0f;
             break;
         case 3: // Hive
             health = 600.f;
@@ -176,7 +177,9 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
             teleportTimer -= dt;
             if (teleportTimer <= 0.f)
             {
-                teleportTimer = 2.5f + (float)(std::rand() % 150) / 100.f;
+                float hpPct = health / maxHealth;
+                teleportTimer = hpPct < 0.4f ? 1.0f + (float)(std::rand() % 80) / 100.f
+                                             : 1.5f + (float)(std::rand() % 100) / 100.f;
                 float nx = 80.f + (float)(std::rand() % 640);
                 float ny = 80.f + (float)(std::rand() % 440);
                 position.x = nx;

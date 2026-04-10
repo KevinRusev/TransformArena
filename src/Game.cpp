@@ -702,16 +702,13 @@ void Game::checkCollisions()
             {
                 float dmg = player.getDashDamage();
 
-                // Phantom boss: dash stuns it and deals bonus damage
+                // Phantom boss: dash deals bonus damage and briefly slows
                 if (enemy.isBoss() && enemy.getBossType() == 2)
                 {
-                    if (!enemy.isStunned())
-                    {
-                        enemy.stun(3.f);
-                        dmg *= 2.f;
-                        spawnParticles(enemy.getPosition(), sf::Color(255, 255, 100), 20, 200.f, 4.f);
-                        addScreenShake(6.f, 0.2f);
-                    }
+                    dmg *= 2.5f;
+                    enemy.stun(0.8f);
+                    spawnParticles(enemy.getPosition(), sf::Color(255, 255, 100), 20, 200.f, 4.f);
+                    addScreenShake(6.f, 0.2f);
                 }
 
                 enemy.takeDamage(dmg);
@@ -913,7 +910,7 @@ void Game::draw()
         switch (currentFloor)
         {
         case 1: introName = "THE GUARDIAN"; introHint = "Break its shield with SLAM [3]"; introColor = sf::Color(180, 80, 255); break;
-        case 2: introName = "THE PHANTOM"; introHint = "Stun it with DASH [1]"; introColor = sf::Color(60, 220, 140); break;
+        case 2: introName = "THE PHANTOM"; introHint = "DASH [1] deals bonus damage"; introColor = sf::Color(60, 220, 140); break;
         case 3: introName = "THE HIVE"; introHint = "Clear minions with SLAM, snipe the core"; introColor = sf::Color(255, 160, 40); break;
         default: introName = "BOSS"; introHint = ""; break;
         }
