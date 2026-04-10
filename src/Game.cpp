@@ -958,6 +958,31 @@ void Game::draw()
 
     if (floorFadeTimer > 0.f)
         drawFloorFade();
+
+    if (paused && fontLoaded)
+    {
+        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+        overlay.setFillColor(sf::Color(0, 0, 0, 160));
+        window.draw(overlay);
+
+        sf::Text pauseText;
+        pauseText.setFont(font);
+        pauseText.setCharacterSize(52);
+        pauseText.setFillColor(sf::Color(240, 240, 255));
+        pauseText.setString("PAUSED");
+        sf::FloatRect pb = pauseText.getLocalBounds();
+        pauseText.setPosition(400.f - pb.width / 2.f, 220.f);
+        window.draw(pauseText);
+
+        sf::Text hint;
+        hint.setFont(font);
+        hint.setCharacterSize(16);
+        hint.setFillColor(sf::Color(160, 160, 180));
+        hint.setString("Press ESC to resume");
+        pb = hint.getLocalBounds();
+        hint.setPosition(400.f - pb.width / 2.f, 290.f);
+        window.draw(hint);
+    }
 }
 
 void Game::drawMinimap()
