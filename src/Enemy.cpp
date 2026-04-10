@@ -80,10 +80,10 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss, int bossType)
             shieldUp = true;
             break;
         case 2: // Phantom
-            health = 450.f;
-            speed = 180.f;
-            teleportTimer = 1.8f;
-            shootInterval = 1.0f;
+            health = 600.f;
+            speed = 220.f;
+            teleportTimer = 1.2f;
+            shootInterval = 0.6f;
             break;
         case 3: // Hive
             health = 600.f;
@@ -172,29 +172,43 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
     }
     else if (bossFlag && bossTypeId == 2) // Phantom
     {
+        float hpPct = health / maxHealth;
+
         if (!stunned)
         {
             teleportTimer -= dt;
             if (teleportTimer <= 0.f)
             {
-                float hpPct = health / maxHealth;
-                teleportTimer = hpPct < 0.4f ? 1.0f + (float)(std::rand() % 80) / 100.f
-                                             : 1.5f + (float)(std::rand() % 100) / 100.f;
-                float nx = 80.f + (float)(std::rand() % 640);
-                float ny = 80.f + (float)(std::rand() % 440);
-                position.x = nx;
-                position.y = ny;
+                teleportTimer = hpPct < 0.4f ? 0.7f + (float)(std::rand() % 50) / 100.f
+                                             : 1.0f + (float)(std::rand() % 60) / 100.f;
+                // teleport to a spot away from the player
+                for (int tries = 0; tries < 10; tries++)
+                {
+                    float nx = 80.f + (float)(std::rand() % 640);
+                    float ny = 80.f + (float)(std::rand() % 440);
+                    float ddx = nx - playerPos.x, ddy = ny - playerPos.y;
+                    float dd = std::sqrt(ddx * ddx + ddy * ddy);
+                    if (dd > 200.f || tries == 9) { position.x = nx; position.y = ny; break; }
+                }
             }
 
-            // fast erratic movement
-            float zigzag = std::sin(bossPhaseTimer * 5.f);
-            position.x += (dir.x * 0.3f + dir.y * zigzag * 0.7f) * currentSpeed * dt;
-            position.y += (dir.y * 0.3f - dir.x * zigzag * 0.7f) * currentSpeed * dt;
+            // actively flee from player when close, strafe when far
+            if (dist < 180.f)
+            {
+                position.x -= dir.x * currentSpeed * 1.5f * dt;
+                position.y -= dir.y * currentSpeed * 1.5f * dt;
+            }
+            else
+            {
+                float zigzag = std::sin(bossPhaseTimer * 6.f);
+                position.x += (dir.y * zigzag) * currentSpeed * dt;
+                position.y += (-dir.x * zigzag) * currentSpeed * dt;
+            }
         }
         else
         {
-            position.x += dir.x * currentSpeed * dt;
-            position.y += dir.y * currentSpeed * dt;
+            position.x += dir.x * currentSpeed * 0.1f * dt;
+            position.y += dir.y * currentSpeed * 0.1f * dt;
         }
 
         bossPhaseTimer += dt;
@@ -202,24 +216,52 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
         if (shootTimer <= 0.f)
         {
             shootTimer = stunned ? shootInterval * 2.f : shootInterval;
-            float bulletSpeed = 220.f;
+            float bulletSpeed = 280.f;
 
-            // burst of 3 aimed shots
-            for (int burst = 0; burst < 3; burst++)
+            // alternate between aimed burst and spread
+            bossPhase = (bossPhase + 1) % 3;
+
+            if (bossPhase == 0)
             {
-                float spread = ((float)burst - 1.f) * 0.2f;
-                float a = std::atan2(dir.y, dir.x) + spread;
-                sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
-                projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(80, 255, 180));
+                // 5-shot aimed fan
+                for (int i = 0; i < 5; i++)
+                {
+                    float spread = ((float)i - 2.f) * 0.18f;
+                    float a = std::atan2(dir.y, dir.x) + spread;
+                    sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
+                    projectiles.emplace_back(position, bv, 4.f, 12.f, false, sf::Color(80, 255, 180));
+                }
+            }
+            else if (bossPhase == 1)
+            {
+                // cross pattern (4 directions + diagonals)
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = (float)i / 8.f * 6.2832f + bossPhaseTimer * 0.5f;
+                    sf::Vector2f bv(std::cos(a) * bulletSpeed * 0.9f, std::sin(a) * bulletSpeed * 0.9f);
+                    projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(60, 220, 160));
+                }
+            }
+            else
+            {
+                // predict player position and fire ahead
+                float a = std::atan2(dir.y, dir.x);
+                for (int i = -1; i <= 1; i++)
+                {
+                    float predict = a + i * 0.3f;
+                    sf::Vector2f bv(std::cos(predict) * bulletSpeed * 1.1f, std::sin(predict) * bulletSpeed * 1.1f);
+                    projectiles.emplace_back(position, bv, 5.f, 14.f, false, sf::Color(100, 255, 200));
+                }
             }
 
-            if (health / maxHealth < 0.4f && !stunned)
+            if (hpPct < 0.5f)
             {
-                // extra ring when low HP
-                for (int i = 0; i < 10; i++)
+                // bonus ring every shot when below half
+                int ringCount = hpPct < 0.25f ? 14 : 10;
+                for (int i = 0; i < ringCount; i++)
                 {
-                    float a = (float)i / 10.f * 6.2832f;
-                    sf::Vector2f bv(std::cos(a) * 160.f, std::sin(a) * 160.f);
+                    float a = (float)i / ringCount * 6.2832f + bossPhaseTimer;
+                    sf::Vector2f bv(std::cos(a) * 180.f, std::sin(a) * 180.f);
                     projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(60, 220, 160));
                 }
             }
