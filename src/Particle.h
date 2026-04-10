@@ -7,10 +7,14 @@ struct DamageNumber
     sf::Vector2f position;
     float lifetime;
     int value;
+    std::string text;
     sf::Color color;
 
     DamageNumber(sf::Vector2f pos, int val, sf::Color col)
         : position(pos), lifetime(0.8f), value(val), color(col) {}
+
+    DamageNumber(sf::Vector2f pos, const std::string& txt, sf::Color col)
+        : position(pos), lifetime(1.0f), value(0), text(txt), color(col) {}
 
     void update(float dt)
     {
@@ -22,12 +26,13 @@ struct DamageNumber
 
     void draw(sf::RenderWindow& window, const sf::Font& font) const
     {
-        float t = lifetime / 0.8f;
+        float maxLife = text.empty() ? 0.8f : 1.0f;
+        float t = lifetime / maxLife;
         float scale = 0.8f + 0.4f * (1.f - t);
         sf::Text txt;
         txt.setFont(font);
-        txt.setCharacterSize((unsigned int)(14 * scale));
-        txt.setString(std::to_string(value));
+        txt.setCharacterSize((unsigned int)((text.empty() ? 14 : 16) * scale));
+        txt.setString(text.empty() ? std::to_string(value) : text);
         sf::FloatRect b = txt.getLocalBounds();
         txt.setOrigin(b.width / 2.f, b.height / 2.f);
         txt.setPosition(position);

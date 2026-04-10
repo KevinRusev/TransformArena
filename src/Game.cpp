@@ -725,6 +725,8 @@ void Game::checkCollisions()
                 enemy.takeDamage(dmg);
                 enemy.markDashHit();
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
+                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
                 spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
             }
@@ -753,6 +755,8 @@ void Game::checkCollisions()
 
                 enemy.takeDamage(player.getGroundPoundDamage());
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)player.getGroundPoundDamage(), sf::Color(80, 210, 80));
+                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
                 enemy.pushAway(pp, knockback);
                 spawnParticles(enemy.getPosition(), sf::Color(80, 210, 80), 8, 140.f, 3.f);
@@ -773,6 +777,8 @@ void Game::checkCollisions()
             {
                 enemy.takeDamage(proj.damage);
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)proj.damage, sf::Color(255, 200, 60));
+                if (isEffectiveForm(player.getForm(), enemy.getType()))
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
                 proj.lifetime = 0.f;
                 spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
                 break;
