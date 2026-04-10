@@ -84,6 +84,8 @@ private:
     Item equippedItem;
     float barrierTimer;
 
+    bool paused;
+
     SaveData saveData;
     bool hasContinue;
     int titleSelection;

@@ -21,6 +21,7 @@ Game::Game(sf::RenderWindow& win)
     , floorFadeTimer(0.f), floorFadeDir(0.f)
     , choosingBuff(false), buffChoiceTimer(0.f)
     , barrierTimer(0.f)
+    , paused(false)
     , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
 {
@@ -255,6 +256,14 @@ void Game::handleEvent(const sf::Event& event)
     if (event.type != sf::Event::KeyPressed)
         return;
 
+    if (event.key.code == sf::Keyboard::Escape && state == GameState::Playing && !choosingBuff)
+    {
+        paused = !paused;
+        return;
+    }
+
+    if (paused) return;
+
     switch (state)
     {
     case GameState::Title:
@@ -359,6 +368,8 @@ void Game::tryBuyShopItem(int index)
 
 void Game::update(float dt)
 {
+    if (paused) return;
+
     if (shakeTimer > 0.f)
     {
         shakeTimer -= dt;
