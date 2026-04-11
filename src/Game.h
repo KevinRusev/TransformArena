@@ -9,6 +9,7 @@
 #include "Room.h"
 #include "Item.h"
 #include "SaveData.h"
+#include "Sound.h"
 
 enum class GameState { Title, Playing, GameOver, BossIntro };
 
@@ -92,6 +93,8 @@ private:
 
     sf::Font font;
     bool fontLoaded;
+
+    SoundSystem sfx;
 
     void generateFloor();
     Room& currentRoom();

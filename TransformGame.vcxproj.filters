@@ -52,5 +52,8 @@
     <ClInclude Include="src\Item.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Sound.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
