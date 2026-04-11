@@ -32,6 +32,17 @@ Game::Game(sf::RenderWindow& win)
     else if (font.loadFromFile("assets/font.ttf"))
         fontLoaded = true;
 
+    sfx.setVolume(SoundSystem::HIT, 40.f);
+    sfx.setVolume(SoundSystem::DASH, 50.f);
+    sfx.setVolume(SoundSystem::SHOOT, 35.f);
+    sfx.setVolume(SoundSystem::SLAM, 55.f);
+    sfx.setVolume(SoundSystem::COIN, 30.f);
+    sfx.setVolume(SoundSystem::BOSS_HIT, 65.f);
+    sfx.setVolume(SoundSystem::PORTAL, 50.f);
+    sfx.setVolume(SoundSystem::DEATH, 70.f);
+    sfx.setVolume(SoundSystem::TRANSFORM, 40.f);
+    sfx.setVolume(SoundSystem::BUY, 45.f);
+
     saveData.load();
     hasContinue = saveData.hasRun;
 }
@@ -640,6 +651,7 @@ void Game::update(float dt)
     if (!player.isAlive())
     {
         state = GameState::GameOver;
+        sfx.play(SoundSystem::DEATH);
         addScreenShake(12.f, 0.4f);
         spawnParticles(player.getPosition(), sf::Color::White, 30, 250.f, 6.f);
         saveData.score = score;
