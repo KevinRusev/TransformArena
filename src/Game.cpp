@@ -376,6 +376,7 @@ void Game::tryBuyShopItem(int index)
     equippedItem = item;
     equippedItem.cooldownTimer = 0.f;
 
+    sfx.play(SoundSystem::BUY);
     spawnParticles(player.getPosition(), sf::Color(255, 220, 80), 20, 180.f, 5.f);
 }
 
@@ -613,9 +614,9 @@ void Game::update(float dt)
     if (portalActive && currentRoom().isBossRoom())
         portalPulse += dt;
 
-    // player enters portal (only in boss room)
     if (portalActive && currentRoom().isBossRoom() && !choosingBuff && dist(player.getPosition(), portalPos) < 35.f)
     {
+        sfx.play(SoundSystem::PORTAL);
         if (currentFloor >= totalFloors)
         {
             state = GameState::GameOver;
@@ -733,6 +734,7 @@ void Game::checkCollisions()
                 {
                     dmg *= 2.5f;
                     enemy.stun(0.8f);
+                    sfx.play(SoundSystem::BOSS_HIT);
                     spawnParticles(enemy.getPosition(), sf::Color(255, 255, 100), 20, 200.f, 4.f);
                     addScreenShake(6.f, 0.2f);
                 }
@@ -761,6 +763,7 @@ void Game::checkCollisions()
                 if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
                 {
                     enemy.breakShield(4.f);
+                    sfx.play(SoundSystem::BOSS_HIT);
                     spawnParticles(enemy.getPosition(), sf::Color(180, 100, 255), 25, 250.f, 5.f);
                     addScreenShake(10.f, 0.3f);
                 }
