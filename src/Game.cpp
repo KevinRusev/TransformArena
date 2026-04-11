@@ -322,7 +322,17 @@ void Game::handleEvent(const sf::Event& event)
         else if (event.key.code == sf::Keyboard::Num3 && !currentRoom().isShopRoom())
             player.transform(Form::Square);
         else if (event.key.code == sf::Keyboard::Space)
+        {
+            float prevCd = player.getCooldownPercent();
             player.useAbility();
+            if (player.getCooldownPercent() < prevCd)
+            {
+                if (player.getForm() == Form::Circle)
+                    sfx.play(SoundSystem::DASH);
+                else if (player.getForm() == Form::Triangle)
+                    sfx.play(SoundSystem::SHOOT);
+            }
+        }
 
         if (player.justTransformed())
         {
