@@ -331,11 +331,14 @@ void Game::handleEvent(const sf::Event& event)
                     sfx.play(SoundSystem::DASH);
                 else if (player.getForm() == Form::Triangle)
                     sfx.play(SoundSystem::SHOOT);
+                else if (player.getForm() == Form::Square)
+                    sfx.play(SoundSystem::SLAM);
             }
         }
 
         if (player.justTransformed())
         {
+            sfx.play(SoundSystem::TRANSFORM);
             sf::Color c;
             switch (player.getForm())
             {
