@@ -548,10 +548,10 @@ void Game::update(float dt)
             spawnDeathParticles(enemy.getPosition(), enemy.getType());
             totalKills++;
 
-            // coins from kills
             int coinDrop = 2 + std::rand() % 3;
             if (enemy.isBoss()) coinDrop = 15 + currentFloor * 5;
             coins += coinDrop;
+            sfx.play(SoundSystem::COIN);
 
             int points = enemy.isBoss() ? 100 : 10;
             if (isEffectiveForm(player.getForm(), enemy.getType()))
@@ -739,6 +739,7 @@ void Game::checkCollisions()
 
                 enemy.takeDamage(dmg);
                 enemy.markDashHit();
+                sfx.play(SoundSystem::HIT);
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
                 if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
@@ -797,6 +798,7 @@ void Game::checkCollisions()
                 bool effective = isEffectiveForm(player.getForm(), enemy.getType());
                 if (effective) projDmg *= 1.5f;
                 enemy.takeDamage(projDmg);
+                sfx.play(SoundSystem::HIT);
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)projDmg, sf::Color(255, 200, 60));
                 if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
