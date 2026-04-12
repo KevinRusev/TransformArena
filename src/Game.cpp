@@ -22,6 +22,7 @@ Game::Game(sf::RenderWindow& win)
     , choosingBuff(false), buffChoiceTimer(0.f)
     , barrierTimer(0.f)
     , paused(false)
+    , deathSlowTimer(0.f)
     , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
 {
@@ -395,6 +396,10 @@ void Game::update(float dt)
 {
     if (paused) return;
 
+    float realDt = dt;
+    if (deathSlowTimer > 0.f)
+        dt *= 0.2f;
+
     if (shakeTimer > 0.f)
     {
         shakeTimer -= dt;
@@ -648,16 +653,25 @@ void Game::update(float dt)
 
     checkDoorTransition();
 
-    if (!player.isAlive())
+    if (!player.isAlive() && deathSlowTimer <= 0.f && state != GameState::GameOver)
     {
-        state = GameState::GameOver;
         sfx.play(SoundSystem::DEATH);
         addScreenShake(12.f, 0.4f);
         spawnParticles(player.getPosition(), sf::Color::White, 30, 250.f, 6.f);
-        saveData.score = score;
-        saveData.totalKills = totalKills;
-        saveData.floor = currentFloor;
-        updateHighScores();
+        deathSlowTimer = 1.2f;
+    }
+
+    if (deathSlowTimer > 0.f)
+    {
+        deathSlowTimer -= realDt;
+        if (deathSlowTimer <= 0.f)
+        {
+            state = GameState::GameOver;
+            saveData.score = score;
+            saveData.totalKills = totalKills;
+            saveData.floor = currentFloor;
+            updateHighScores();
+        }
     }
 }
 
@@ -1752,6 +1766,7 @@ void Game::restart()
     shakeOffset = sf::Vector2f(0.f, 0.f);
     transitionTimer = 0.f;
     bossAlive = false;
+    deathSlowTimer = 0.f;
     portalActive = false;
     portalPulse = 0.f;
     floorFadeTimer = 0.f;

@@ -86,6 +86,7 @@ private:
     float barrierTimer;
 
     bool paused;
+    float deathSlowTimer;
 
     SaveData saveData;
     bool hasContinue;
