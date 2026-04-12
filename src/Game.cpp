@@ -907,6 +907,17 @@ void Game::draw()
 
     sf::View view = window.getDefaultView();
     view.move(shakeOffset);
+
+    if (deathSlowTimer > 0.f)
+    {
+        float progress = 1.f - (deathSlowTimer / 1.2f);
+        float zoom = 1.f - progress * 0.3f;
+        view.setSize(800.f * zoom, 600.f * zoom);
+        sf::Vector2f center = view.getCenter();
+        sf::Vector2f target = player.getPosition();
+        view.setCenter(center + (target - center) * progress * 0.5f);
+    }
+
     window.setView(view);
 
     currentRoom().drawFloor(window);
@@ -950,6 +961,14 @@ void Game::draw()
 
     if (fontLoaded && currentRoom().isShopRoom())
         currentRoom().drawShop(window, font);
+
+    if (deathSlowTimer > 0.f)
+    {
+        float progress = 1.f - (deathSlowTimer / 1.2f);
+        sf::RectangleShape fade(sf::Vector2f(800.f, 600.f));
+        fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(progress * 120)));
+        window.draw(fade);
+    }
 
     window.setView(window.getDefaultView());
 
