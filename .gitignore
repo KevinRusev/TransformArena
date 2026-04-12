@@ -45,3 +45,6 @@ ipch/
 
 # Save file
 savegame.txt
+
+# Helper scripts
+commit.py
