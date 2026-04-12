@@ -127,4 +127,5 @@ private:
 
     float dist(sf::Vector2f a, sf::Vector2f b);
     bool isEffectiveForm(Form form, EnemyType enemy);
+    sf::View getLetterboxView();
 };

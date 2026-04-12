@@ -348,6 +348,12 @@ void Game::handleEvent(const sf::Event& event)
 
         if (event.key.code == sf::Keyboard::E)
             activateItem();
+        else if (event.key.code == sf::Keyboard::Num1 && !currentRoom().isShopRoom())
+            player.transform(Form::Circle);
+        else if (event.key.code == sf::Keyboard::Num2 && !currentRoom().isShopRoom())
+            player.transform(Form::Triangle);
+        else if (event.key.code == sf::Keyboard::Num3 && !currentRoom().isShopRoom())
+            player.transform(Form::Square);
         else if (event.key.code == sf::Keyboard::Space)
         {
             float prevCd = player.getCooldownPercent();
@@ -494,7 +500,7 @@ void Game::update(float dt)
     if (player.getForm() == Form::Triangle)
     {
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
-        sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, getLetterboxView());
+        sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel);
         player.aimAt(mouseWorld);
     }
 
@@ -782,7 +788,7 @@ void Game::checkCollisions()
 
                 if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
                 {
-                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED!", sf::Color(255, 150, 255));
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED! Use SLAM [3]", sf::Color(255, 150, 255));
                     spawnParticles(enemy.getPosition(), sf::Color(180, 100, 255), 8, 100.f, 3.f);
                     enemy.markDashHit();
                 }
@@ -853,7 +859,7 @@ void Game::checkCollisions()
 
                 if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
                 {
-                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED!", sf::Color(255, 150, 255));
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED! Use SLAM [3]", sf::Color(255, 150, 255));
                     proj.lifetime = 0.f;
                     spawnParticles(proj.position, sf::Color(180, 100, 255), 6, 80.f, 2.f);
                 }
@@ -939,7 +945,7 @@ void Game::draw()
 {
     window.clear(sf::Color(10, 10, 16));
 
-    sf::View view = getLetterboxView();
+    sf::View view = window.getDefaultView();
     view.move(shakeOffset);
 
     if (deathSlowTimer > 0.f)
@@ -1004,7 +1010,7 @@ void Game::draw()
         window.draw(fade);
     }
 
-    window.setView(getLetterboxView());
+    window.setView(window.getDefaultView());
 
     drawHUD();
     drawMinimap();
@@ -1031,8 +1037,8 @@ void Game::draw()
         sf::Color introColor(220, 40, 40);
         switch (currentFloor)
         {
-        case 1: introName = "THE GUARDIAN"; introHint = "Break its shield with SLAM (Square)"; introColor = sf::Color(180, 80, 255); break;
-        case 2: introName = "THE PHANTOM"; introHint = "DASH (Circle) deals bonus damage"; introColor = sf::Color(60, 220, 140); break;
+        case 1: introName = "THE GUARDIAN"; introHint = "Break its shield with SLAM [3]"; introColor = sf::Color(180, 80, 255); break;
+        case 2: introName = "THE PHANTOM"; introHint = "DASH [1] deals bonus damage"; introColor = sf::Color(60, 220, 140); break;
         case 3: introName = "THE HIVE"; introHint = "Clear minions with SLAM, snipe the core"; introColor = sf::Color(255, 160, 40); break;
         default: introName = "BOSS"; introHint = ""; break;
         }
@@ -1301,17 +1307,17 @@ void Game::drawHUD()
     switch (player.getForm())
     {
     case Form::Circle:
-        formName = "CIRCLE";
+        formName = "[1] CIRCLE";
         abilityDesc = "Space: Dash";
         formColor = sf::Color(80, 180, 255);
         break;
     case Form::Triangle:
-        formName = "TRIANGLE";
-        abilityDesc = "Space: Shoot";
+        formName = "[2] TRIANGLE";
+        abilityDesc = "Space: Shoot (mouse aim)";
         formColor = sf::Color(255, 160, 40);
         break;
     case Form::Square:
-        formName = "SQUARE";
+        formName = "[3] SQUARE";
         abilityDesc = "Space: Slam";
         formColor = sf::Color(80, 210, 80);
         break;
@@ -1436,9 +1442,9 @@ void Game::drawTitle()
 
     float yStart = 190.f;
     const char* descs[] = {
-        "CIRCLE  -  Fast. Dash through enemies.",
-        "TRIANGLE  -  Ranged. Aim with mouse.",
-        "SQUARE  -  Tank. Ground pound slam."
+        "[1] CIRCLE  -  Fast. Dash through enemies.",
+        "[2] TRIANGLE  -  Ranged. Aim with mouse.",
+        "[3] SQUARE  -  Tank. Ground pound slam."
     };
     sf::Color colors[] = {
         sf::Color(80, 180, 255),
@@ -1462,7 +1468,7 @@ void Game::drawTitle()
     controls.setFont(font);
     controls.setCharacterSize(12);
     controls.setFillColor(sf::Color(100, 100, 120));
-    controls.setString("WASD: Move | Scroll: Transform | Space: Ability | E: Item | ESC: Pause");
+    controls.setString("WASD: Move | 1/2/3 or Scroll: Transform | Space: Ability | E: Item | ESC: Pause");
     b = controls.getLocalBounds();
     controls.setPosition(400.f - b.width / 2.f, 290.f);
     window.draw(controls);

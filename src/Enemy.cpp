@@ -192,17 +192,15 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
                 }
             }
 
-            // actively flee from player when close, strafe when far
-            if (dist < 180.f)
+            if (dist < 200.f)
             {
-                position.x -= dir.x * currentSpeed * 1.5f * dt;
-                position.y -= dir.y * currentSpeed * 1.5f * dt;
+                position.x -= dir.x * currentSpeed * 1.2f * dt;
+                position.y -= dir.y * currentSpeed * 1.2f * dt;
             }
             else
             {
-                float zigzag = std::sin(bossPhaseTimer * 6.f);
-                position.x += (dir.y * zigzag) * currentSpeed * dt;
-                position.y += (-dir.x * zigzag) * currentSpeed * dt;
+                position.x += dir.x * currentSpeed * 0.4f * dt;
+                position.y += dir.y * currentSpeed * 0.4f * dt;
             }
         }
         else
