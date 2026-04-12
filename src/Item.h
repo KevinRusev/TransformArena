@@ -2,7 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 
-enum class ItemType { None, FlameRing, FrostShard, ThunderStrike, ShadowDash, BarrierShield };
+enum class ItemType { None, FlameRing, FrostShard, ThunderStrike, ShadowDash, BarrierShield, VortexPull, MirrorClone, ChainLightning };
 
 struct Item
 {
@@ -31,31 +31,49 @@ struct Item
         case ItemType::FlameRing:
             item.name = "Flame Ring";
             item.desc = "Fire burst around you";
-            item.cost = 20 + floor * 5;
+            item.cost = 30 + floor * 8;
             item.cooldown = 4.f;
             break;
         case ItemType::FrostShard:
             item.name = "Frost Shard";
             item.desc = "3 piercing ice shots";
-            item.cost = 25 + floor * 5;
+            item.cost = 35 + floor * 8;
             item.cooldown = 3.f;
             break;
         case ItemType::ThunderStrike:
             item.name = "Thunder Strike";
             item.desc = "Zap 3 nearest enemies";
-            item.cost = 30 + floor * 5;
+            item.cost = 45 + floor * 10;
             item.cooldown = 5.f;
             break;
         case ItemType::ShadowDash:
             item.name = "Shadow Dash";
             item.desc = "Teleport + damage trail";
-            item.cost = 25 + floor * 5;
+            item.cost = 40 + floor * 8;
             item.cooldown = 4.f;
             break;
         case ItemType::BarrierShield:
             item.name = "Barrier Shield";
             item.desc = "Block bullets for 3s";
-            item.cost = 20 + floor * 5;
+            item.cost = 35 + floor * 8;
+            item.cooldown = 6.f;
+            break;
+        case ItemType::VortexPull:
+            item.name = "Vortex Pull";
+            item.desc = "Pull all enemies to you";
+            item.cost = 55 + floor * 10;
+            item.cooldown = 7.f;
+            break;
+        case ItemType::MirrorClone:
+            item.name = "Mirror Clone";
+            item.desc = "Spawn a decoy that draws fire";
+            item.cost = 50 + floor * 10;
+            item.cooldown = 8.f;
+            break;
+        case ItemType::ChainLightning:
+            item.name = "Chain Lightning";
+            item.desc = "Bolt chains between all enemies";
+            item.cost = 60 + floor * 12;
             item.cooldown = 6.f;
             break;
         default:
@@ -185,6 +203,68 @@ struct Item
             inner.setPosition(cx, cy);
             inner.setFillColor(sf::Color(80, 140, 255, 100));
             window.draw(inner);
+            break;
+        }
+        case ItemType::VortexPull:
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                float r = (12.f - i * 3.f) * scale;
+                sf::CircleShape ring(r, 16);
+                ring.setOrigin(r, r);
+                ring.setPosition(cx, cy);
+                ring.setFillColor(sf::Color::Transparent);
+                ring.setOutlineColor(sf::Color(200, 60, 255, 200 - i * 50));
+                ring.setOutlineThickness(2.f * scale);
+                window.draw(ring);
+            }
+            sf::CircleShape core(3.f * scale);
+            core.setOrigin(3.f * scale, 3.f * scale);
+            core.setPosition(cx, cy);
+            core.setFillColor(sf::Color(255, 100, 255));
+            window.draw(core);
+            break;
+        }
+        case ItemType::MirrorClone:
+        {
+            for (int m = -1; m <= 1; m += 2)
+            {
+                float ox = (float)m * 8.f * scale;
+                sf::RectangleShape body(sf::Vector2f(8.f * scale, 16.f * scale));
+                body.setOrigin(4.f * scale, 8.f * scale);
+                body.setPosition(cx + ox, cy);
+                body.setFillColor(sf::Color(180, 180, 220, m > 0 ? 120 : 220));
+                body.setOutlineColor(sf::Color(220, 220, 255));
+                body.setOutlineThickness(1.f);
+                window.draw(body);
+            }
+            break;
+        }
+        case ItemType::ChainLightning:
+        {
+            sf::ConvexShape bolt(6);
+            float s = scale;
+            bolt.setPoint(0, sf::Vector2f(-5.f * s, -12.f * s));
+            bolt.setPoint(1, sf::Vector2f(3.f * s, -4.f * s));
+            bolt.setPoint(2, sf::Vector2f(-2.f * s, -2.f * s));
+            bolt.setPoint(3, sf::Vector2f(7.f * s, 12.f * s));
+            bolt.setPoint(4, sf::Vector2f(-1.f * s, 4.f * s));
+            bolt.setPoint(5, sf::Vector2f(2.f * s, 2.f * s));
+            bolt.setPosition(cx, cy);
+            bolt.setFillColor(sf::Color(100, 200, 255));
+            bolt.setOutlineColor(sf::Color(180, 230, 255));
+            bolt.setOutlineThickness(1.5f);
+            window.draw(bolt);
+
+            for (int i = 0; i < 3; i++)
+            {
+                float a = (float)i / 3.f * 6.2832f;
+                sf::CircleShape spark(2.f * s);
+                spark.setOrigin(2.f * s, 2.f * s);
+                spark.setPosition(cx + std::cos(a) * 12.f * s, cy + std::sin(a) * 12.f * s);
+                spark.setFillColor(sf::Color(150, 220, 255));
+                window.draw(spark);
+            }
             break;
         }
         default: break;

@@ -30,11 +30,11 @@ void Room::generateShopItems()
 {
     ItemType allTypes[] = {
         ItemType::FlameRing, ItemType::FrostShard,
-        ItemType::ThunderStrike, ItemType::ShadowDash, ItemType::BarrierShield
+        ItemType::ThunderStrike, ItemType::ShadowDash, ItemType::BarrierShield,
+        ItemType::VortexPull, ItemType::MirrorClone, ItemType::ChainLightning
     };
 
-    // shuffle to pick 3 unique items
-    int count = 5;
+    int count = 8;
     for (int i = count - 1; i > 0; i--)
     {
         int j = std::rand() % (i + 1);

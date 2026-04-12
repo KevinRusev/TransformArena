@@ -265,6 +265,27 @@ Room& Game::currentRoom()
 
 void Game::handleEvent(const sf::Event& event)
 {
+    if (event.type == sf::Event::MouseWheelScrolled && state == GameState::Playing && !choosingBuff && !paused)
+    {
+        int dir = (event.mouseWheelScroll.delta > 0) ? 1 : -1;
+        int f = (int)player.getForm();
+        f = (f + dir + 3) % 3;
+        player.transform((Form)f);
+        if (player.justTransformed())
+        {
+            sfx.play(SoundSystem::TRANSFORM);
+            sf::Color c;
+            switch (player.getForm())
+            {
+            case Form::Circle:   c = sf::Color(80, 180, 255); break;
+            case Form::Triangle: c = sf::Color(255, 160, 40);  break;
+            case Form::Square:   c = sf::Color(80, 210, 80);   break;
+            }
+            spawnParticles(player.getPosition(), c, 20, 200.f, 5.f);
+        }
+        return;
+    }
+
     if (event.type != sf::Event::KeyPressed)
         return;
 
@@ -565,8 +586,8 @@ void Game::update(float dt)
             spawnDeathParticles(enemy.getPosition(), enemy.getType());
             totalKills++;
 
-            int coinDrop = 2 + std::rand() % 3;
-            if (enemy.isBoss()) coinDrop = 15 + currentFloor * 5;
+            int coinDrop = 1 + std::rand() % 2;
+            if (enemy.isBoss()) coinDrop = 10 + currentFloor * 3;
             coins += coinDrop;
             sfx.play(SoundSystem::COIN);
 
@@ -765,12 +786,21 @@ void Game::checkCollisions()
                     addScreenShake(6.f, 0.2f);
                 }
 
-                enemy.takeDamage(dmg);
-                enemy.markDashHit();
-                sfx.play(SoundSystem::HIT);
-                dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
-                if (effective)
-                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
+                {
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED! Use SLAM [3]", sf::Color(255, 150, 255));
+                    spawnParticles(enemy.getPosition(), sf::Color(180, 100, 255), 8, 100.f, 3.f);
+                    enemy.markDashHit();
+                }
+                else
+                {
+                    enemy.takeDamage(dmg);
+                    enemy.markDashHit();
+                    sfx.play(SoundSystem::HIT);
+                    dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
+                    if (effective)
+                        dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                }
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
                 spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
             }
@@ -826,13 +856,23 @@ void Game::checkCollisions()
                 float projDmg = proj.damage;
                 bool effective = isEffectiveForm(player.getForm(), enemy.getType());
                 if (effective) projDmg *= 1.5f;
-                enemy.takeDamage(projDmg);
-                sfx.play(SoundSystem::HIT);
-                dmgNumbers.emplace_back(enemy.getPosition(), (int)projDmg, sf::Color(255, 200, 60));
-                if (effective)
-                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
-                proj.lifetime = 0.f;
-                spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
+
+                if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
+                {
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 30.f), "SHIELDED! Use SLAM [3]", sf::Color(255, 150, 255));
+                    proj.lifetime = 0.f;
+                    spawnParticles(proj.position, sf::Color(180, 100, 255), 6, 80.f, 2.f);
+                }
+                else
+                {
+                    enemy.takeDamage(projDmg);
+                    sfx.play(SoundSystem::HIT);
+                    dmgNumbers.emplace_back(enemy.getPosition(), (int)projDmg, sf::Color(255, 200, 60));
+                    if (effective)
+                        dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                    proj.lifetime = 0.f;
+                    spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
+                }
                 break;
             }
         }
@@ -1288,7 +1328,8 @@ void Game::drawHUD()
     formTxt.setCharacterSize(17);
     formTxt.setFillColor(formColor);
     formTxt.setString(formName);
-    formTxt.setPosition(660.f, 15.f);
+    sf::FloatRect formBounds = formTxt.getLocalBounds();
+    formTxt.setPosition(785.f - formBounds.width, 15.f);
     window.draw(formTxt);
 
     sf::Text abilTxt;
@@ -1296,7 +1337,8 @@ void Game::drawHUD()
     abilTxt.setCharacterSize(13);
     abilTxt.setFillColor(sf::Color(180, 180, 180));
     abilTxt.setString(abilityDesc);
-    abilTxt.setPosition(660.f, 36.f);
+    sf::FloatRect abilBounds = abilTxt.getLocalBounds();
+    abilTxt.setPosition(785.f - abilBounds.width, 36.f);
     window.draw(abilTxt);
 
     // cooldown bar
@@ -1426,7 +1468,7 @@ void Game::drawTitle()
     controls.setFont(font);
     controls.setCharacterSize(12);
     controls.setFillColor(sf::Color(100, 100, 120));
-    controls.setString("WASD: Move | 1/2/3: Transform | Space: Ability | E: Item | Mouse: Aim");
+    controls.setString("WASD: Move | 1/2/3 or Scroll: Transform | Space: Ability | E: Item | ESC: Pause");
     b = controls.getLocalBounds();
     controls.setPosition(400.f - b.width / 2.f, 290.f);
     window.draw(controls);
@@ -2098,6 +2140,84 @@ void Game::activateItem()
     {
         barrierTimer = 3.f;
         spawnParticles(pp, sf::Color(100, 160, 255), 15, 120.f, 3.f);
+        break;
+    }
+    case ItemType::VortexPull:
+    {
+        float pullRadius = 300.f;
+        float dmg = 15.f * player.getDamageMultiplier();
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            float d = dist(pp, enemy.getPosition());
+            if (d < pullRadius)
+            {
+                enemy.pushAway(pp, -120.f);
+                enemy.takeDamage(dmg);
+                dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(200, 60, 255));
+            }
+        }
+        for (int r = 0; r < 3; r++)
+        {
+            float radius = pullRadius * (1.f - r * 0.3f);
+            spawnParticles(pp, sf::Color(200, 60, 255, (sf::Uint8)(200 - r * 50)), 15, radius * 0.6f, 4.f);
+        }
+        addScreenShake(5.f, 0.2f);
+        break;
+    }
+    case ItemType::MirrorClone:
+    {
+        float offsetX = 60.f + (float)(std::rand() % 40);
+        float offsetY = 60.f + (float)(std::rand() % 40);
+        if (std::rand() % 2) offsetX = -offsetX;
+        if (std::rand() % 2) offsetY = -offsetY;
+        sf::Vector2f clonePos(pp.x + offsetX, pp.y + offsetY);
+        if (clonePos.x < 30.f) clonePos.x = 30.f;
+        if (clonePos.x > 770.f) clonePos.x = 770.f;
+        if (clonePos.y < 30.f) clonePos.y = 30.f;
+        if (clonePos.y > 570.f) clonePos.y = 570.f;
+
+        for (auto& enemy : enemies)
+        {
+            if (!enemy.isAlive()) continue;
+            if (dist(enemy.getPosition(), clonePos) < 250.f)
+                enemy.setPosition(enemy.getPosition().x + (clonePos.x - enemy.getPosition().x) * 0.3f,
+                                  enemy.getPosition().y + (clonePos.y - enemy.getPosition().y) * 0.3f);
+        }
+        spawnParticles(clonePos, sf::Color(180, 180, 255), 25, 150.f, 5.f);
+        spawnParticles(pp, sf::Color(200, 200, 255), 10, 80.f, 3.f);
+        break;
+    }
+    case ItemType::ChainLightning:
+    {
+        float dmg = 35.f * player.getDamageMultiplier();
+        sf::Vector2f last = pp;
+        int maxChain = 8;
+        int chained = 0;
+        std::vector<bool> hit(enemies.size(), false);
+
+        for (int c = 0; c < maxChain; c++)
+        {
+            float best = 99999.f;
+            int bestIdx = -1;
+            for (size_t i = 0; i < enemies.size(); i++)
+            {
+                if (!enemies[i].isAlive() || hit[i]) continue;
+                float d = dist(last, enemies[i].getPosition());
+                if (d < best && d < 250.f)
+                { best = d; bestIdx = (int)i; }
+            }
+            if (bestIdx < 0) break;
+            hit[bestIdx] = true;
+            enemies[bestIdx].takeDamage(dmg);
+            dmgNumbers.emplace_back(enemies[bestIdx].getPosition(), (int)dmg, sf::Color(100, 200, 255));
+            spawnParticles(enemies[bestIdx].getPosition(), sf::Color(100, 200, 255), 8, 120.f, 3.f);
+            last = enemies[bestIdx].getPosition();
+            chained++;
+            dmg *= 0.85f;
+        }
+        if (chained > 0) addScreenShake(4.f, 0.15f);
+        spawnParticles(pp, sf::Color(100, 200, 255), 10, 100.f, 3.f);
         break;
     }
     default: break;

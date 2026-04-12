@@ -4,6 +4,10 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 struct SaveData
 {
     bool hasRun;
@@ -29,7 +33,17 @@ struct SaveData
 
     static std::string filePath()
     {
+#ifdef _WIN32
+        char path[MAX_PATH];
+        GetModuleFileNameA(NULL, path, MAX_PATH);
+        std::string dir(path);
+        size_t pos = dir.find_last_of("\\/");
+        if (pos != std::string::npos)
+            dir = dir.substr(0, pos + 1);
+        return dir + "savegame.txt";
+#else
         return "savegame.txt";
+#endif
     }
 
     bool save() const

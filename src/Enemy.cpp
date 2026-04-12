@@ -80,10 +80,10 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss, int bossType)
             shieldUp = true;
             break;
         case 2: // Phantom
-            health = 600.f;
-            speed = 220.f;
-            teleportTimer = 1.2f;
-            shootInterval = 0.6f;
+            health = 500.f;
+            speed = 180.f;
+            teleportTimer = 1.5f;
+            shootInterval = 0.9f;
             break;
         case 3: // Hive
             health = 600.f;
@@ -179,8 +179,8 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
             teleportTimer -= dt;
             if (teleportTimer <= 0.f)
             {
-                teleportTimer = hpPct < 0.4f ? 0.7f + (float)(std::rand() % 50) / 100.f
-                                             : 1.0f + (float)(std::rand() % 60) / 100.f;
+                teleportTimer = hpPct < 0.4f ? 1.2f + (float)(std::rand() % 60) / 100.f
+                                             : 1.8f + (float)(std::rand() % 80) / 100.f;
                 // teleport to a spot away from the player
                 for (int tries = 0; tries < 10; tries++)
                 {
@@ -223,10 +223,9 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
 
             if (bossPhase == 0)
             {
-                // 5-shot aimed fan
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 3; i++)
                 {
-                    float spread = ((float)i - 2.f) * 0.18f;
+                    float spread = ((float)i - 1.f) * 0.2f;
                     float a = std::atan2(dir.y, dir.x) + spread;
                     sf::Vector2f bv(std::cos(a) * bulletSpeed, std::sin(a) * bulletSpeed);
                     projectiles.emplace_back(position, bv, 4.f, 12.f, false, sf::Color(80, 255, 180));
@@ -254,14 +253,13 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
                 }
             }
 
-            if (hpPct < 0.5f)
+            if (hpPct < 0.35f)
             {
-                // bonus ring every shot when below half
-                int ringCount = hpPct < 0.25f ? 14 : 10;
+                int ringCount = hpPct < 0.15f ? 10 : 6;
                 for (int i = 0; i < ringCount; i++)
                 {
                     float a = (float)i / ringCount * 6.2832f + bossPhaseTimer;
-                    sf::Vector2f bv(std::cos(a) * 180.f, std::sin(a) * 180.f);
+                    sf::Vector2f bv(std::cos(a) * 160.f, std::sin(a) * 160.f);
                     projectiles.emplace_back(position, bv, 4.f, 10.f, false, sf::Color(60, 220, 160));
                 }
             }
