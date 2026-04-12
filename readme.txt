@@ -13,17 +13,18 @@ Controls:
   Mouse              -  Aim (Triangle form)
   Space              -  Attack / Use ability
   E                  -  Use equipped weapon special move
+  ESC                -  Pause / Resume
   W/S on title       -  Select menu option
   Enter              -  Confirm selection
   R                  -  Restart (after game over)
-  ESC                -  Quit
 
 Game Features:
   - 3 Floors with procedurally generated room layouts
   - Maps get bigger each floor (6/7/8 rooms)
   - Minimap with icons: B for boss, $ for shop
   - Room walls with tile patterns, door indicators
-  - Boss fight at the end of each floor
+  - 3 unique bosses: Guardian, Phantom, Hive
+  - Each boss requires different form strategy to defeat
   - Weapon shop: buy weapons with unique special moves
   - 5 weapons: Flame Ring, Frost Shard, Thunder Strike,
     Shadow Dash, Barrier Shield
@@ -35,14 +36,20 @@ Game Features:
   - Save/load system with continue option
   - High score tracking across sessions
   - Floating damage numbers
+  - EFFECTIVE! indicator with 1.5x bonus for matching forms
   - Cooldown indicator
+  - Pause menu with ESC
+  - Procedural sound effects (no external audio files)
+  - Slow-motion death effect with zoom
   - Game over stats (kills, floor, time, coins, weapon)
 
 Enemy Types:
   - Chaser (red circle) - fast, rushes player
   - Shooter (yellow diamond) - ranged, fires projectiles
   - Brute (purple square) - slow, tanky, charges when close
-  - Boss variants: larger, 5x health, red glow
+  - Dasher (orange triangle) - charges at the player
+  - Shielder (blue pentagon) - frontal shield, slam to break
+  - Boss variants: unique mechanics per floor
 
 Shape Abilities:
   Circle  - Dash through enemies with i-frames
@@ -55,5 +62,11 @@ Weapons (buy from shop, press E to use):
   Thunder Strike  - Zap 3 nearest enemies with lightning
   Shadow Dash     - Teleport forward leaving a damage trail
   Barrier Shield  - Block all projectiles for 3 seconds
+
+Sound Effects:
+  All sounds are procedurally generated using SFML Audio.
+  Sine waves, noise bursts, and frequency sweeps create
+  hit, dash, shoot, slam, coin, portal, and death sounds
+  without any external audio files.
 
 Built with SFML 2.6.2 and Visual Studio 2022.
