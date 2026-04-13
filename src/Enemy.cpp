@@ -76,7 +76,7 @@ Enemy::Enemy(float x, float y, EnemyType type, bool isBoss, int bossType)
         {
         case 1: // Guardian
             health = 500.f;
-            speed = 70.f;
+            speed = 45.f;
             shieldUp = true;
             break;
         case 2: // Phantom
@@ -135,7 +135,7 @@ void Enemy::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pr
     if (bossFlag && bossTypeId == 1) // Guardian
     {
         if (dist < 200.f)
-            currentSpeed = speed * 2.2f;
+            currentSpeed = speed * 1.6f;
 
         float wobble = std::sin(bossPhaseTimer * 2.f) * 0.3f;
         position.x += (dir.x + wobble * dir.y) * currentSpeed * dt;

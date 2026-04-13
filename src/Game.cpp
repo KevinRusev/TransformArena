@@ -785,6 +785,17 @@ void Game::transitionToRoom(int dir)
         bossIntroTimer = 1.5f;
     }
 
+    // room entry dust burst
+    sf::Vector2f pp = player.getPosition();
+    spawnParticles(pp, sf::Color(120, 110, 90, 150), 15, 80.f, 3.f);
+    spawnParticles(pp, sf::Color(80, 75, 65, 100), 10, 50.f, 2.f);
+    for (int i = 0; i < 6; i++)
+    {
+        float rx = 100.f + (float)(std::rand() % 600);
+        float ry = 100.f + (float)(std::rand() % 400);
+        spawnParticles(sf::Vector2f(rx, ry), sf::Color(90, 85, 75, 80), 3, 30.f, 2.f);
+    }
+
     transitionTimer = 0.3f;
     transitionDir = dir;
 }
@@ -1076,7 +1087,7 @@ void Game::draw()
 
     if (damageFlashTimer > 0.f)
     {
-        float alpha = (damageFlashTimer / 0.25f) * 0.35f;
+        float alpha = (damageFlashTimer / 0.25f) * 0.12f;
         sf::RectangleShape flash(sf::Vector2f(800.f, 600.f));
         flash.setFillColor(sf::Color(255, 0, 0, (sf::Uint8)(255 * alpha)));
         window.draw(flash);

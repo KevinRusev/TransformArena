@@ -459,41 +459,102 @@ void Room::generateObstacles()
     if (roomType == RoomType::Shop || roomType == RoomType::Start)
         return;
 
-    int count = 1 + std::rand() % 4;
-    if (roomType == RoomType::Boss) count = std::max(1, count - 1);
+    auto addBlock = [&](float x, float y, float w, float h) {
+        bool nearDoor = false;
+        float cx = x + w / 2.f, cy = y + h / 2.f;
+        if (doors[0] && y < 80.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
+        if (doors[2] && y + h > 520.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
+        if (doors[3] && x < 80.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
+        if (doors[1] && x + w > 720.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
+        if (!nearDoor)
+            obstacles.emplace_back(x, y, w, h);
+    };
 
-    for (int i = 0; i < count; i++)
+    int layout = std::rand() % 8;
+
+    if (roomType == RoomType::Boss)
+        layout = std::rand() % 3;
+
+    switch (layout)
     {
-        for (int tries = 0; tries < 30; tries++)
+    case 0: // four corner pillars
+        addBlock(80.f, 80.f, 50.f, 50.f);
+        addBlock(670.f, 80.f, 50.f, 50.f);
+        addBlock(80.f, 470.f, 50.f, 50.f);
+        addBlock(670.f, 470.f, 50.f, 50.f);
+        break;
+
+    case 1: // center cross
+        addBlock(370.f, 180.f, 60.f, 40.f);
+        addBlock(370.f, 380.f, 60.f, 40.f);
+        addBlock(250.f, 270.f, 40.f, 60.f);
+        addBlock(510.f, 270.f, 40.f, 60.f);
+        break;
+
+    case 2: // two long horizontal walls
+        addBlock(120.f, 200.f, 200.f, 30.f);
+        addBlock(480.f, 370.f, 200.f, 30.f);
+        break;
+
+    case 3: // L-shapes in opposite corners
+        addBlock(80.f, 80.f, 100.f, 30.f);
+        addBlock(80.f, 110.f, 30.f, 70.f);
+        addBlock(620.f, 490.f, 100.f, 30.f);
+        addBlock(690.f, 420.f, 30.f, 70.f);
+        break;
+
+    case 4: // scattered pillars
+        addBlock(200.f, 150.f, 40.f, 40.f);
+        addBlock(560.f, 150.f, 40.f, 40.f);
+        addBlock(380.f, 300.f, 40.f, 40.f);
+        addBlock(200.f, 420.f, 40.f, 40.f);
+        addBlock(560.f, 420.f, 40.f, 40.f);
+        break;
+
+    case 5: // U-shape barricade
+        addBlock(250.f, 200.f, 30.f, 180.f);
+        addBlock(250.f, 380.f, 300.f, 30.f);
+        addBlock(520.f, 200.f, 30.f, 180.f);
+        break;
+
+    case 6: // diagonal cover
+        addBlock(150.f, 140.f, 60.f, 40.f);
+        addBlock(300.f, 250.f, 60.f, 40.f);
+        addBlock(450.f, 360.f, 60.f, 40.f);
+        addBlock(600.f, 470.f, 60.f, 40.f);
+        break;
+
+    default: // random (original behavior)
+    {
+        int count = 2 + std::rand() % 3;
+        for (int i = 0; i < count; i++)
         {
-            float w = 30.f + (float)(std::rand() % 40);
-            float h = 30.f + (float)(std::rand() % 40);
-            float x = 60.f + (float)(std::rand() % (int)(680.f - w));
-            float y = 60.f + (float)(std::rand() % (int)(480.f - h));
-
-            float cx = x + w / 2.f, cy = y + h / 2.f;
-            if (std::abs(cx - 400.f) < 110.f && std::abs(cy - 300.f) < 110.f)
-                continue;
-
-            bool nearDoor = false;
-            if (doors[0] && y < 80.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
-            if (doors[2] && y + h > 520.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
-            if (doors[3] && x < 80.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
-            if (doors[1] && x + w > 720.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
-            if (nearDoor) continue;
-
-            sf::FloatRect rect(x, y, w, h);
-            bool overlaps = false;
-            for (auto& o : obstacles)
+            for (int tries = 0; tries < 30; tries++)
             {
-                if (rect.intersects(sf::FloatRect(o.left - 15.f, o.top - 15.f, o.width + 30.f, o.height + 30.f)))
-                { overlaps = true; break; }
-            }
-            if (overlaps) continue;
+                float w = 30.f + (float)(std::rand() % 40);
+                float h = 30.f + (float)(std::rand() % 40);
+                float x = 60.f + (float)(std::rand() % (int)(680.f - w));
+                float y = 60.f + (float)(std::rand() % (int)(480.f - h));
 
-            obstacles.push_back(rect);
-            break;
+                float cx = x + w / 2.f, cy = y + h / 2.f;
+                if (std::abs(cx - 400.f) < 110.f && std::abs(cy - 300.f) < 110.f)
+                    continue;
+
+                sf::FloatRect rect(x, y, w, h);
+                bool ok = true;
+                for (auto& o : obstacles)
+                {
+                    if (rect.intersects(sf::FloatRect(o.left - 15.f, o.top - 15.f, o.width + 30.f, o.height + 30.f)))
+                    { ok = false; break; }
+                }
+                if (!ok) continue;
+
+                addBlock(x, y, w, h);
+                break;
+            }
         }
+        break;
+    }
     }
 }
 
