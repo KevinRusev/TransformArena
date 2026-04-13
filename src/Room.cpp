@@ -20,10 +20,13 @@ void Room::generate(int floor, RoomType type)
     spawned = false;
     enemies.clear();
     shopItems.clear();
+    obstacles.clear();
     floorPattern = std::rand() % 4;
 
     if (type == RoomType::Shop)
         generateShopItems();
+
+    generateObstacles();
 }
 
 void Room::generateShopItems()
@@ -158,6 +161,26 @@ void Room::update(float dt, sf::Vector2f playerPos, std::vector<Projectile>& pro
                 float push = (minDist - d) * 0.5f;
                 enemies[i].pushAway(aj, push);
                 enemies[j].pushAway(ai, push);
+            }
+        }
+    }
+
+    for (auto& e : enemies)
+    {
+        if (!e.isAlive()) continue;
+        sf::Vector2f ep = e.getPosition();
+        float er = e.getRadius();
+        for (auto& obs : obstacles)
+        {
+            float closestX = std::max(obs.left, std::min(ep.x, obs.left + obs.width));
+            float closestY = std::max(obs.top, std::min(ep.y, obs.top + obs.height));
+            float ddx = ep.x - closestX;
+            float ddy = ep.y - closestY;
+            float d = std::sqrt(ddx * ddx + ddy * ddy);
+            if (d < er && d > 0.1f)
+            {
+                float push = er - d;
+                e.setPosition(ep.x + (ddx / d) * push, ep.y + (ddy / d) * push);
             }
         }
     }
@@ -429,3 +452,68 @@ std::vector<Item>& Room::getShopItems() { return shopItems; }
 void Room::setDoor(int direction, bool exists) { doors[direction] = exists; }
 bool Room::hasDoor(int direction) const { return doors[direction]; }
 bool Room::doorOpen(int direction) const { return doors[direction] && cleared; }
+const std::vector<sf::FloatRect>& Room::getObstacles() const { return obstacles; }
+
+void Room::generateObstacles()
+{
+    if (roomType == RoomType::Shop || roomType == RoomType::Start)
+        return;
+
+    int count = 1 + std::rand() % 4;
+    if (roomType == RoomType::Boss) count = std::max(1, count - 1);
+
+    for (int i = 0; i < count; i++)
+    {
+        for (int tries = 0; tries < 30; tries++)
+        {
+            float w = 30.f + (float)(std::rand() % 40);
+            float h = 30.f + (float)(std::rand() % 40);
+            float x = 60.f + (float)(std::rand() % (int)(680.f - w));
+            float y = 60.f + (float)(std::rand() % (int)(480.f - h));
+
+            float cx = x + w / 2.f, cy = y + h / 2.f;
+            if (std::abs(cx - 400.f) < 110.f && std::abs(cy - 300.f) < 110.f)
+                continue;
+
+            bool nearDoor = false;
+            if (doors[0] && y < 80.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
+            if (doors[2] && y + h > 520.f && std::abs(cx - 400.f) < 80.f) nearDoor = true;
+            if (doors[3] && x < 80.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
+            if (doors[1] && x + w > 720.f && std::abs(cy - 300.f) < 80.f) nearDoor = true;
+            if (nearDoor) continue;
+
+            sf::FloatRect rect(x, y, w, h);
+            bool overlaps = false;
+            for (auto& o : obstacles)
+            {
+                if (rect.intersects(sf::FloatRect(o.left - 15.f, o.top - 15.f, o.width + 30.f, o.height + 30.f)))
+                { overlaps = true; break; }
+            }
+            if (overlaps) continue;
+
+            obstacles.push_back(rect);
+            break;
+        }
+    }
+}
+
+void Room::drawObstacles(sf::RenderWindow& window)
+{
+    for (auto& obs : obstacles)
+    {
+        sf::RectangleShape block(sf::Vector2f(obs.width, obs.height));
+        block.setPosition(obs.left, obs.top);
+        block.setFillColor(sf::Color(55, 55, 75));
+        block.setOutlineColor(sf::Color(70, 70, 95));
+        block.setOutlineThickness(1.5f);
+        window.draw(block);
+
+        if (obs.width > 35.f && obs.height > 35.f)
+        {
+            sf::RectangleShape inner(sf::Vector2f(obs.width - 10.f, obs.height - 10.f));
+            inner.setPosition(obs.left + 5.f, obs.top + 5.f);
+            inner.setFillColor(sf::Color(45, 45, 65));
+            window.draw(inner);
+        }
+    }
+}

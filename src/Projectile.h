@@ -29,17 +29,33 @@ struct Projectile
 
     void draw(sf::RenderWindow& window) const
     {
-        sf::CircleShape shape(radius);
-        shape.setOrigin(radius, radius);
-        shape.setPosition(position);
-        shape.setFillColor(color);
+        float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+        if (speed > 1.f)
+        {
+            sf::Vector2f dir = velocity / speed;
+            float trailLen = std::min(speed * 0.04f, 20.f);
+            for (int i = 1; i <= 4; i++)
+            {
+                float t = (float)i / 4.f;
+                float r = radius * (1.f - t * 0.5f);
+                sf::CircleShape trail(r);
+                trail.setOrigin(r, r);
+                trail.setPosition(position - dir * trailLen * t);
+                trail.setFillColor(sf::Color(color.r, color.g, color.b, (sf::Uint8)(100 * (1.f - t))));
+                window.draw(trail);
+            }
+        }
 
-        // glow ring around projectile
         sf::CircleShape glow(radius * 2.f);
         glow.setOrigin(radius * 2.f, radius * 2.f);
         glow.setPosition(position);
         glow.setFillColor(sf::Color(color.r, color.g, color.b, 30));
         window.draw(glow);
+
+        sf::CircleShape shape(radius);
+        shape.setOrigin(radius, radius);
+        shape.setPosition(position);
+        shape.setFillColor(color);
         window.draw(shape);
     }
 };

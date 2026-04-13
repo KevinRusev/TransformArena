@@ -25,6 +25,7 @@ public:
     void drawFloor(sf::RenderWindow& window);
     void drawDoors(sf::RenderWindow& window);
     void drawShop(sf::RenderWindow& window, const sf::Font& font);
+    void drawObstacles(sf::RenderWindow& window);
 
     bool isCleared() const;
     bool isBossRoom() const;
@@ -39,12 +40,14 @@ public:
     bool doorOpen(int direction) const;
 
     std::vector<Item>& getShopItems();
+    const std::vector<sf::FloatRect>& getObstacles() const;
 
     int gridX, gridY;
 
 private:
     std::vector<Enemy> enemies;
     std::vector<Item> shopItems;
+    std::vector<sf::FloatRect> obstacles;
     RoomType roomType;
     bool cleared;
     bool visited;
@@ -56,4 +59,5 @@ private:
 
     void spawnEnemies();
     void generateShopItems();
+    void generateObstacles();
 };

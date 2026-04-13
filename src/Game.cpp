@@ -23,6 +23,10 @@ Game::Game(sf::RenderWindow& win)
     , barrierTimer(0.f)
     , paused(false)
     , deathSlowTimer(0.f)
+    , damageFlashTimer(0.f)
+    , titleAnimTimer(0.f)
+    , showingTutorial(false)
+    , winTimer(0.f)
     , hasContinue(false), titleSelection(0)
     , fontLoaded(false)
 {
@@ -300,25 +304,33 @@ void Game::handleEvent(const sf::Event& event)
     switch (state)
     {
     case GameState::Title:
-        if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::W)
+        if (showingTutorial)
         {
-            if (hasContinue) titleSelection = (titleSelection == 0) ? 1 : 0;
+            showingTutorial = false;
+            return;
         }
-        else if (event.key.code == sf::Keyboard::Down || event.key.code == sf::Keyboard::S)
         {
-            if (hasContinue) titleSelection = (titleSelection == 0) ? 1 : 0;
-        }
-        else if (event.key.code == sf::Keyboard::Enter || event.key.code == sf::Keyboard::Space)
-        {
-            if (titleSelection == 1 && hasContinue)
+            int maxOpt = hasContinue ? 2 : 1;
+            if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::W)
+                titleSelection = (titleSelection - 1 + maxOpt + 1) % (maxOpt + 1);
+            else if (event.key.code == sf::Keyboard::Down || event.key.code == sf::Keyboard::S)
+                titleSelection = (titleSelection + 1) % (maxOpt + 1);
+            else if (event.key.code == sf::Keyboard::Enter || event.key.code == sf::Keyboard::Space)
             {
-                loadGame();
-                state = GameState::Playing;
-            }
-            else
-            {
-                state = GameState::Playing;
-                restart();
+                if (titleSelection == 0)
+                {
+                    state = GameState::Playing;
+                    restart();
+                }
+                else if (titleSelection == 1 && hasContinue)
+                {
+                    loadGame();
+                    state = GameState::Playing;
+                }
+                else
+                {
+                    showingTutorial = true;
+                }
             }
         }
         break;
@@ -411,6 +423,11 @@ void Game::update(float dt)
 {
     if (paused) return;
 
+    titleAnimTimer += dt;
+
+    if (damageFlashTimer > 0.f)
+        damageFlashTimer -= dt;
+
     float realDt = dt;
     if (deathSlowTimer > 0.f)
         dt *= 0.2f;
@@ -487,7 +504,26 @@ void Game::update(float dt)
         for (int d = 0; d < 4; d++)
         {
             if (!currentRoom().doorOpen(d)) continue;
-            // if near door zone, don't clamp
+        }
+    }
+
+    // obstacle collision
+    {
+        sf::Vector2f pp = player.getPosition();
+        float pr = player.getRadius();
+        for (auto& obs : currentRoom().getObstacles())
+        {
+            float closestX = std::max(obs.left, std::min(pp.x, obs.left + obs.width));
+            float closestY = std::max(obs.top, std::min(pp.y, obs.top + obs.height));
+            float ddx = pp.x - closestX;
+            float ddy = pp.y - closestY;
+            float d = std::sqrt(ddx * ddx + ddy * ddy);
+            if (d < pr && d > 0.1f)
+            {
+                float push = pr - d;
+                player.setPosition(pp.x + (ddx / d) * push, pp.y + (ddy / d) * push);
+                pp = player.getPosition();
+            }
         }
     }
 
@@ -768,7 +804,9 @@ void Game::checkCollisions()
             {
                 float dmg = player.getDashDamage();
                 bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                bool weak = isWeakForm(player.getForm(), enemy.getType()) && currentFloor >= 2;
                 if (effective) dmg *= 1.5f;
+                if (weak) dmg *= 0.5f;
 
                 // Phantom boss: dash deals bonus damage and briefly slows
                 if (enemy.isBoss() && enemy.getBossType() == 2)
@@ -794,6 +832,8 @@ void Game::checkCollisions()
                     dmgNumbers.emplace_back(enemy.getPosition(), (int)dmg, sf::Color(80, 180, 255));
                     if (effective)
                         dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                    if (weak)
+                        dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "RESISTED!", sf::Color(255, 100, 100));
                 }
                 spawnParticles(enemy.getPosition(), sf::Color(80, 180, 255), 12, 160.f, 4.f);
                 spawnParticles(enemy.getPosition(), sf::Color(180, 230, 255), 6, 80.f, 2.f);
@@ -824,11 +864,15 @@ void Game::checkCollisions()
 
                 float slamDmg = player.getGroundPoundDamage();
                 bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                bool weak = isWeakForm(player.getForm(), enemy.getType()) && currentFloor >= 2;
                 if (effective) slamDmg *= 1.5f;
+                if (weak) slamDmg *= 0.5f;
                 enemy.takeDamage(slamDmg);
                 dmgNumbers.emplace_back(enemy.getPosition(), (int)slamDmg, sf::Color(80, 210, 80));
                 if (effective)
                     dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                if (weak)
+                    dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "RESISTED!", sf::Color(255, 100, 100));
                 float knockback = 80.f + (player.getGroundPoundRadius() - d) * 0.5f;
                 enemy.pushAway(pp, knockback);
                 spawnParticles(enemy.getPosition(), sf::Color(80, 210, 80), 8, 140.f, 3.f);
@@ -849,7 +893,9 @@ void Game::checkCollisions()
             {
                 float projDmg = proj.damage;
                 bool effective = isEffectiveForm(player.getForm(), enemy.getType());
+                bool weak = isWeakForm(player.getForm(), enemy.getType()) && currentFloor >= 2;
                 if (effective) projDmg *= 1.5f;
+                if (weak) projDmg *= 0.5f;
 
                 if (enemy.isBoss() && enemy.getBossType() == 1 && enemy.isShieldUp())
                 {
@@ -864,6 +910,8 @@ void Game::checkCollisions()
                     dmgNumbers.emplace_back(enemy.getPosition(), (int)projDmg, sf::Color(255, 200, 60));
                     if (effective)
                         dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "EFFECTIVE!", sf::Color(80, 255, 200));
+                    if (weak)
+                        dmgNumbers.emplace_back(sf::Vector2f(enemy.getPosition().x, enemy.getPosition().y - 20.f), "RESISTED!", sf::Color(255, 100, 100));
                     proj.lifetime = 0.f;
                     spawnParticles(proj.position, sf::Color(255, 200, 60), 8, 120.f, 3.f);
                 }
@@ -896,6 +944,7 @@ void Game::checkCollisions()
                 else
                     player.takeDamage((int)proj.damage);
                 addScreenShake(4.f, 0.15f);
+                damageFlashTimer = 0.25f;
             }
             proj.lifetime = 0.f;
             spawnParticles(proj.position, sf::Color(255, 80, 80), 5, 100.f, 3.f);
@@ -918,6 +967,26 @@ void Game::checkCollisions()
                     player.takeDamage(enemy.getContactDamage());
                 damageCooldown = 0.4f;
                 addScreenShake(3.f, 0.1f);
+                damageFlashTimer = 0.25f;
+                break;
+            }
+        }
+    }
+
+    // projectile-obstacle collision
+    for (auto& proj : projectiles)
+    {
+        if (!proj.isAlive()) continue;
+        for (auto& obs : currentRoom().getObstacles())
+        {
+            float cx = std::max(obs.left, std::min(proj.position.x, obs.left + obs.width));
+            float cy = std::max(obs.top, std::min(proj.position.y, obs.top + obs.height));
+            float ddx = proj.position.x - cx;
+            float ddy = proj.position.y - cy;
+            if (ddx * ddx + ddy * ddy < proj.radius * proj.radius)
+            {
+                proj.lifetime = 0.f;
+                spawnParticles(proj.position, sf::Color(100, 100, 120), 3, 60.f, 2.f);
                 break;
             }
         }
@@ -955,6 +1024,7 @@ void Game::draw()
     window.setView(view);
 
     currentRoom().drawFloor(window);
+    currentRoom().drawObstacles(window);
     currentRoom().drawWalls(window);
     currentRoom().drawDoors(window);
 
@@ -1002,6 +1072,14 @@ void Game::draw()
         sf::RectangleShape fade(sf::Vector2f(800.f, 600.f));
         fade.setFillColor(sf::Color(0, 0, 0, (sf::Uint8)(progress * 120)));
         window.draw(fade);
+    }
+
+    if (damageFlashTimer > 0.f)
+    {
+        float alpha = (damageFlashTimer / 0.25f) * 0.35f;
+        sf::RectangleShape flash(sf::Vector2f(800.f, 600.f));
+        flash.setFillColor(sf::Color(255, 0, 0, (sf::Uint8)(255 * alpha)));
+        window.draw(flash);
     }
 
     window.setView(getLetterboxView());
@@ -1411,10 +1489,54 @@ void Game::drawHUD()
 void Game::drawTitle()
 {
     sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    overlay.setFillColor(sf::Color(0, 0, 0, 200));
     window.draw(overlay);
 
+    // animated floating shapes in background
+    float t = titleAnimTimer;
+    for (int i = 0; i < 12; i++)
+    {
+        float phase = i * 0.85f;
+        float x = 400.f + std::sin(t * 0.3f + phase) * 320.f;
+        float y = 300.f + std::cos(t * 0.25f + phase * 1.3f) * 220.f;
+        float sz = 12.f + std::sin(t * 0.5f + phase) * 5.f;
+        float alpha = 20.f + std::sin(t * 0.4f + phase) * 10.f;
+
+        if (i % 3 == 0)
+        {
+            sf::CircleShape c(sz);
+            c.setOrigin(sz, sz);
+            c.setPosition(x, y);
+            c.setFillColor(sf::Color(80, 180, 255, (sf::Uint8)alpha));
+            window.draw(c);
+        }
+        else if (i % 3 == 1)
+        {
+            sf::CircleShape tri(sz, 3);
+            tri.setOrigin(sz, sz);
+            tri.setPosition(x, y);
+            tri.setRotation(t * 20.f + phase * 60.f);
+            tri.setFillColor(sf::Color(255, 160, 40, (sf::Uint8)alpha));
+            window.draw(tri);
+        }
+        else
+        {
+            sf::RectangleShape sq(sf::Vector2f(sz * 1.5f, sz * 1.5f));
+            sq.setOrigin(sz * 0.75f, sz * 0.75f);
+            sq.setPosition(x, y);
+            sq.setRotation(t * 15.f + phase * 45.f);
+            sq.setFillColor(sf::Color(80, 210, 80, (sf::Uint8)alpha));
+            window.draw(sq);
+        }
+    }
+
     if (!fontLoaded) return;
+
+    if (showingTutorial)
+    {
+        drawTutorial();
+        return;
+    }
 
     sf::Text title;
     title.setFont(font);
@@ -1469,27 +1591,41 @@ void Game::drawTitle()
 
     // menu
     float menuY = 340.f;
+    int optIdx = 0;
+
     sf::Text newGame;
     newGame.setFont(font);
     newGame.setCharacterSize(22);
-    newGame.setFillColor(titleSelection == 0 ? sf::Color::White : sf::Color(80, 80, 100));
-    newGame.setString(titleSelection == 0 ? "> New Game" : "  New Game");
+    newGame.setFillColor(titleSelection == optIdx ? sf::Color::White : sf::Color(80, 80, 100));
+    newGame.setString(titleSelection == optIdx ? "> New Game" : "  New Game");
     b = newGame.getLocalBounds();
     newGame.setPosition(400.f - b.width / 2.f, menuY);
     window.draw(newGame);
+    optIdx++;
 
     if (hasContinue)
     {
         sf::Text cont;
         cont.setFont(font);
         cont.setCharacterSize(22);
-        cont.setFillColor(titleSelection == 1 ? sf::Color::White : sf::Color(80, 80, 100));
-        std::string contStr = titleSelection == 1 ? "> Continue (Floor " + std::to_string(saveData.floor) + ")" : "  Continue (Floor " + std::to_string(saveData.floor) + ")";
+        cont.setFillColor(titleSelection == optIdx ? sf::Color::White : sf::Color(80, 80, 100));
+        std::string contStr = titleSelection == optIdx ? "> Continue (Floor " + std::to_string(saveData.floor) + ")" : "  Continue (Floor " + std::to_string(saveData.floor) + ")";
         cont.setString(contStr);
         b = cont.getLocalBounds();
         cont.setPosition(400.f - b.width / 2.f, menuY + 30.f);
         window.draw(cont);
+        optIdx++;
     }
+
+    int tutIdx = optIdx;
+    sf::Text tutOpt;
+    tutOpt.setFont(font);
+    tutOpt.setCharacterSize(22);
+    tutOpt.setFillColor(titleSelection == tutIdx ? sf::Color::White : sf::Color(80, 80, 100));
+    tutOpt.setString(titleSelection == tutIdx ? "> Tutorial" : "  Tutorial");
+    b = tutOpt.getLocalBounds();
+    tutOpt.setPosition(400.f - b.width / 2.f, menuY + optIdx * 30.f);
+    window.draw(tutOpt);
 
     if (saveData.highScore > 0)
     {
@@ -1499,26 +1635,63 @@ void Game::drawTitle()
         hi.setFillColor(sf::Color(255, 220, 80));
         hi.setString("High Score: " + std::to_string(saveData.highScore) + "  |  Best Floor: " + std::to_string(saveData.highFloor));
         b = hi.getLocalBounds();
-        hi.setPosition(400.f - b.width / 2.f, 440.f);
+        hi.setPosition(400.f - b.width / 2.f, 460.f);
         window.draw(hi);
     }
 }
 
 void Game::drawGameOver()
 {
-    sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
-    overlay.setFillColor(sf::Color(0, 0, 0, 180));
-    window.draw(overlay);
+    bool won = (currentFloor >= totalFloors && currentRoom().isBossRoom() && currentRoom().isCleared());
+
+    if (won)
+    {
+        winTimer += 1.f / 60.f;
+
+        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+        overlay.setFillColor(sf::Color(0, 0, 0, 200));
+        window.draw(overlay);
+
+        for (int i = 0; i < 8; i++)
+        {
+            float phase = i * 0.8f;
+            float x = 400.f + std::sin(winTimer * 1.5f + phase) * 300.f;
+            float y = 300.f + std::cos(winTimer * 1.2f + phase * 1.4f) * 200.f;
+            float sz = 6.f + std::sin(winTimer + phase) * 3.f;
+            sf::CircleShape star(sz, 4);
+            star.setOrigin(sz, sz);
+            star.setPosition(x, y);
+            star.setRotation(winTimer * 40.f + phase * 45.f);
+            star.setFillColor(sf::Color(255, 220, 80, (sf::Uint8)(60 + 30 * std::sin(winTimer + phase))));
+            window.draw(star);
+        }
+    }
+    else
+    {
+        sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
+        overlay.setFillColor(sf::Color(0, 0, 0, 180));
+        window.draw(overlay);
+    }
 
     if (!fontLoaded) return;
 
-    bool won = (currentFloor >= totalFloors && currentRoom().isBossRoom() && currentRoom().isCleared());
-
     sf::Text goText;
     goText.setFont(font);
-    goText.setCharacterSize(48);
-    goText.setFillColor(won ? sf::Color(80, 255, 80) : sf::Color(220, 40, 40));
-    goText.setString(won ? "YOU WIN!" : "GAME OVER");
+    if (won)
+    {
+        float pulse = 1.f + std::sin(winTimer * 3.f) * 0.05f;
+        goText.setCharacterSize((unsigned int)(52 * pulse));
+        sf::Uint8 r = (sf::Uint8)(220 + 35 * std::sin(winTimer * 2.f));
+        sf::Uint8 g = (sf::Uint8)(200 + 55 * std::sin(winTimer * 2.5f));
+        goText.setFillColor(sf::Color(r, g, 60));
+        goText.setString("VICTORY!");
+    }
+    else
+    {
+        goText.setCharacterSize(48);
+        goText.setFillColor(sf::Color(220, 40, 40));
+        goText.setString("GAME OVER");
+    }
     sf::FloatRect b = goText.getLocalBounds();
     goText.setPosition(400.f - b.width / 2.f, 100.f);
     window.draw(goText);
@@ -1822,6 +1995,8 @@ void Game::restart()
     transitionTimer = 0.f;
     bossAlive = false;
     deathSlowTimer = 0.f;
+    damageFlashTimer = 0.f;
+    winTimer = 0.f;
     portalActive = false;
     portalPulse = 0.f;
     floorFadeTimer = 0.f;
@@ -2260,6 +2435,78 @@ bool Game::isEffectiveForm(Form form, EnemyType enemy)
     if (form == Form::Triangle && enemy == EnemyType::Shooter) return true;
     if (form == Form::Square && enemy == EnemyType::Brute) return true;
     return false;
+}
+
+bool Game::isWeakForm(Form form, EnemyType enemy)
+{
+    if (form == Form::Circle && enemy == EnemyType::Shooter) return true;
+    if (form == Form::Triangle && enemy == EnemyType::Brute) return true;
+    if (form == Form::Triangle && enemy == EnemyType::Shielder) return true;
+    if (form == Form::Square && enemy == EnemyType::Chaser) return true;
+    if (form == Form::Square && enemy == EnemyType::Dasher) return true;
+    return false;
+}
+
+void Game::drawTutorial()
+{
+    sf::Text title;
+    title.setFont(font);
+    title.setCharacterSize(36);
+    title.setFillColor(sf::Color(255, 220, 80));
+    title.setString("HOW TO PLAY");
+    sf::FloatRect b = title.getLocalBounds();
+    title.setPosition(400.f - b.width / 2.f, 30.f);
+    window.draw(title);
+
+    struct TutLine { const char* text; sf::Color color; };
+    TutLine lines[] = {
+        {"MOVEMENT", sf::Color(200, 200, 220)},
+        {"  WASD to move  |  Scroll wheel to transform", sf::Color(160, 160, 180)},
+        {"  Space to use ability  |  E to use weapon", sf::Color(160, 160, 180)},
+        {"", sf::Color::White},
+        {"FORMS", sf::Color(200, 200, 220)},
+        {"  Circle (blue) - Dash through enemies with i-frames", sf::Color(80, 180, 255)},
+        {"  Triangle (orange) - Shoot projectiles at mouse aim", sf::Color(255, 160, 40)},
+        {"  Square (green) - Ground pound slam with knockback", sf::Color(80, 210, 80)},
+        {"", sf::Color::White},
+        {"COMBAT TIPS", sf::Color(200, 200, 220)},
+        {"  Each form is strong against certain enemies (1.5x)", sf::Color(80, 255, 200)},
+        {"  Using the wrong form deals less damage (0.5x)", sf::Color(255, 100, 100)},
+        {"  Switch forms often to match the enemy!", sf::Color(160, 160, 180)},
+        {"", sf::Color::White},
+        {"PROGRESSION", sf::Color(200, 200, 220)},
+        {"  Clear all enemies to open doors", sf::Color(160, 160, 180)},
+        {"  Find the boss room (B on minimap) and defeat it", sf::Color(160, 160, 180)},
+        {"  Enter the portal, choose a buff, advance to next floor", sf::Color(160, 160, 180)},
+        {"  Visit shops ($) to buy weapons with coins from kills", sf::Color(255, 220, 80)},
+        {"", sf::Color::White},
+        {"  Survive all 3 floors to win!", sf::Color(200, 200, 220)},
+    };
+
+    float y = 80.f;
+    for (auto& line : lines)
+    {
+        if (line.text[0] == '\0') { y += 6.f; continue; }
+        sf::Text t;
+        t.setFont(font);
+        bool isHeader = (line.text[0] != ' ');
+        t.setCharacterSize(isHeader ? 16 : 13);
+        t.setFillColor(line.color);
+        t.setString(line.text);
+        b = t.getLocalBounds();
+        t.setPosition(isHeader ? 400.f - b.width / 2.f : 120.f, y);
+        window.draw(t);
+        y += isHeader ? 22.f : 18.f;
+    }
+
+    sf::Text back;
+    back.setFont(font);
+    back.setCharacterSize(16);
+    back.setFillColor(sf::Color(140, 140, 160));
+    back.setString("Press any key to go back");
+    b = back.getLocalBounds();
+    back.setPosition(400.f - b.width / 2.f, 560.f);
+    window.draw(back);
 }
 
 float Game::dist(sf::Vector2f a, sf::Vector2f b)

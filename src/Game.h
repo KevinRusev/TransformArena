@@ -87,6 +87,10 @@ private:
 
     bool paused;
     float deathSlowTimer;
+    float damageFlashTimer;
+    float titleAnimTimer;
+    bool showingTutorial;
+    float winTimer;
 
     SaveData saveData;
     bool hasContinue;
@@ -127,5 +131,7 @@ private:
 
     float dist(sf::Vector2f a, sf::Vector2f b);
     bool isEffectiveForm(Form form, EnemyType enemy);
+    bool isWeakForm(Form form, EnemyType enemy);
     sf::View getLetterboxView();
+    void drawTutorial();
 };
