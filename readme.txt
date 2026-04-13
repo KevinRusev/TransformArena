@@ -23,8 +23,11 @@ Game Features:
   - Maps get bigger each floor (6/7/8 rooms)
   - Minimap with icons: B for boss, $ for shop
   - Room walls with tile patterns, door indicators
+  - Random obstacles/cover blocks in rooms
   - 3 unique bosses: Guardian, Phantom, Hive
   - Each boss requires different form strategy to defeat
+  - Form matchup system: effective (1.5x) and resisted (0.5x)
+  - Form resistance on floors 2+ forces switching forms
   - Weapon shop: buy weapons with unique special moves
   - 8 weapons with unique effects and visuals
   - Equip 1 weapon at a time, press E to activate
@@ -33,9 +36,14 @@ Game Features:
   - Choose from 3 buffs after beating each boss (max 3)
   - Save/load system with continue option
   - High score tracking across sessions
-  - Floating damage numbers
-  - EFFECTIVE! indicator with 1.5x bonus for matching forms
+  - Floating damage numbers with trail effects
+  - Projectile trails and glow effects
+  - Damage flash (red screen tint when hit)
+  - EFFECTIVE! and RESISTED! indicators
   - Cooldown indicator
+  - Animated title screen with floating shapes
+  - In-game tutorial accessible from main menu
+  - Victory screen with visual celebration
   - Pause menu with ESC
   - Fullscreen support with F11 (letterboxed)
   - Procedural sound effects (no external audio files)
