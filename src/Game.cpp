@@ -2056,7 +2056,7 @@ void Game::loadGame()
     ownedBuffs.clear();
     buffChoices.clear();
 
-    if (saveData.equippedItemType > 0 && saveData.equippedItemType <= 5)
+    if (saveData.equippedItemType > 0 && saveData.equippedItemType <= (int)ItemType::ChainLightning)
         equippedItem = Item::create((ItemType)saveData.equippedItemType, currentFloor);
     else
         equippedItem = Item();
