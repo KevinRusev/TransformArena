@@ -497,16 +497,6 @@ void Game::update(float dt)
         if (pp.y + pr > 600.f - wall) player.setPosition(pp.x, 600.f - wall - pr);
     }
 
-    // but allow through doors
-    {
-        sf::Vector2f pp = player.getPosition();
-        float pr = player.getRadius();
-        for (int d = 0; d < 4; d++)
-        {
-            if (!currentRoom().doorOpen(d)) continue;
-        }
-    }
-
     // obstacle collision
     {
         sf::Vector2f pp = player.getPosition();
