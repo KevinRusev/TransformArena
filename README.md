@@ -67,7 +67,7 @@ Roughly **3.5k lines** across seven translation units + headers.
 ## Project layout
 
 ```text
-assignment/
+TransformArena/
 ├── src/
 │   ├── main.cpp           Entry: window, events, F11 fullscreen
 │   ├── Game.{h,cpp}       Loop, maps, HUD, items, save/load, buffs, portals
@@ -90,8 +90,8 @@ assignment/
 ## Build
 
 ```powershell
-git clone https://github.com/KevinRusev/assignment.git
-cd assignment
+git clone https://github.com/KevinRusev/TransformArena.git
+cd TransformArena
 start TransformGame.sln
 ```
 
