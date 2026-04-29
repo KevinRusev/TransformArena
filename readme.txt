@@ -80,3 +80,35 @@ Sound Effects:
   without any external audio files.
 
 Built with SFML 2.6.2 and Visual Studio 2022.
+
+--------------------------------------------------------------------------------
+HOW TO BUILD (submission reviewers)
+--------------------------------------------------------------------------------
+1. Extract this zip to a new empty folder (path without spaces recommended).
+2. Open TransformGame.sln in Visual Studio 2022 (install "Desktop development
+   with C++").
+3. Set configuration to Release | x64 (or Debug | x64) and build the solution.
+4. Run with Ctrl+F5. The executable is under bin\Release\ or bin\Debug\.
+   openal32.dll is copied to the output folder automatically by the project.
+
+SFML is included in the SFML\ folder (headers, .lib, .dll) — no separate download.
+
+--------------------------------------------------------------------------------
+ATTRIBUTION — external libraries, tutorials, resources
+--------------------------------------------------------------------------------
+- SFML 2.6 — Simple and Fast Multimedia Library. https://www.sfml-dev.org/
+  Licensed under the zlib/libpng license (see SFML\license.md). Vendored in
+  SFML\ for a portable, out-of-the-box build.
+
+- C++ standard library reference: https://en.cppreference.com/
+
+- Official SFML tutorials and documentation:
+  https://www.sfml-dev.org/tutorials/2.5/ (and 2.6 API where applicable)
+
+- Prep / C++ refresher linked in the BUas assignment brief:
+  https://www.3dgep.com/cpp-fast-track-1-getting-started
+
+- Gameplay feel: loosely inspired by Soul Knight (no code or assets copied).
+
+All graphics are drawn with SFML primitives at runtime. All sound is
+synthesised in code (Sound.h); there are no external image or audio files.

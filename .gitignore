@@ -54,5 +54,8 @@ ipch/
 # Save file
 savegame.txt
 
+# Local submission zip if you create one manually
+TransformArena_CMGT_Submission.zip
+
 # Helper scripts
 commit.py
