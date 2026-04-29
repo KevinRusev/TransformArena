@@ -47,7 +47,7 @@ A personal project that pairs the **“Transform”** intake theme with combat t
 
 ## Gameplay clip
 
-[![Watch on YouTube](https://img.shields.io/badge/Watch-Gameplay-red?style=for-the-badge&logo=youtube)](YOUR_YOUTUBE_LINK_HERE)
+[![Watch on YouTube](https://img.shields.io/badge/Watch-Gameplay-red?style=for-the-badge&logo=youtube)](https://youtu.be/5indKzdOLTc)
 
 | Form | Colour | Ability | Strong vs |
 | --- | --- | --- | --- |
