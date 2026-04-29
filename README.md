@@ -151,5 +151,3 @@ Computer programming student · **Bulgaria** · gameplay in **UE5 (C++)** and pr
 [![Email](https://img.shields.io/badge/Email-kevinrusev1%40gmail.com-red?style=flat-square&logo=gmail)](mailto:kevinrusev1@gmail.com)
 
 **Also see** · [**Medieval Combat Game**](https://github.com/KevinRusev/MedivalCombatGame) — third-person Souls-style combat in Unreal Engine 5 (**C++ only** for combat, AI, and core systems).
-
-Thanks for reading — if you liked the **form-switching** loop here, you’ll find the same combat-reading habits in the UE5 repo above.
