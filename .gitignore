@@ -28,6 +28,11 @@ x86/
 *.pch
 *.log
 
+# Allow SFML libs and DLLs to be committed so the repo clones-and-builds
+!SFML/bin/
+!SFML/lib/*.lib
+!SFML/bin/*.dll
+
 # Visual C++ cache
 ipch/
 *.aps
@@ -39,9 +44,12 @@ ipch/
 *.VC.db
 *.VC.VC.opendb
 
-# Assignment PPT (personal, not code)
+# Assignment artifacts (presentation and gameplay video)
 *.ppt
 *.pptx
+*.mp4
+*.mov
+*.avi
 
 # Save file
 savegame.txt
