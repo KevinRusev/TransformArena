@@ -1,66 +1,93 @@
 # Transform Arena
 
-A top-down roguelike arena shooter built from scratch in **C++17** with **SFML 2.6** — no game engine.
+A top-down, **Souls-inspired roguelike arena** built from scratch in **C++17** with **SFML 2.6** — **no game engine**.
 
-The "Transform" theme is mechanical: switch between three forms mid-combat using the scroll wheel. Each form has unique stats, an exclusive ability, and a different damage matchup against enemies, so picking the right shape at the right moment is the core decision of every fight.
+![Library](https://img.shields.io/badge/Library-SFML_2.6-8CC445?style=flat-square&logo=sfml&logoColor=white)
+![Language](https://img.shields.io/badge/C%2B%2B-17-00599C?style=flat-square&logo=cplusplus&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Shipped-brightgreen?style=flat-square)
 
-> Built as the programming intake assignment for the BUas CMGT Bachelor's programme (intake 2026-27).
+## Overview
 
----
+A personal project that pairs the **“Transform”** intake theme with combat that rewards reading enemy types and **switching forms at the right moment**. You clear procedurally stitched floors, spend coins on weapons, and learn three bosses that each punish the wrong shape — the same loop-driven mindset I use in my Unreal melee prototype, scaled down to 2D vector art and a single codebase you can read end-to-end.
 
-## Gameplay
+> Intake piece for **BUas · Creative Media and Game Technologies (CMGT)** — Bachelor’s programme, **2026–27** intake.  
+> Same author as [**Medieval Combat Game**](https://github.com/KevinRusev/MedivalCombatGame) (UE5 / C++) — different stack, same focus on **feel**, **clarity**, and **systems you can extend**.
 
-[![Watch on YouTube](https://img.shields.io/badge/Gameplay-YouTube-red?logo=youtube)](YOUR_YOUTUBE_LINK_HERE)
+## Highlights
 
-Click the badge above for a full gameplay video.
+**Player — three forms, one scroll wheel**
 
-| Form | Color | Ability | Strong vs |
+- **Circle** · fast · dash through enemies with i-frames  
+- **Triangle** · ranged · mouse-aimed shots  
+- **Square** · tank · ground-pound slam with knockback and shield-breaking utility  
+- Form **matchups**: effective hits (**1.5×**), resisted on later floors (**0.5×**) — forces real-time decisions, not idle DPS  
+- Buffs stack (up to **3**) after each boss; weapons add a second layer of **E**-activated specials
+
+**Enemies & bosses**
+
+- Five regular archetypes (chaser, shooter, brute, dasher, shielder) with distinct movement and pressure  
+- **The Guardian** — frontal shield; **Square**’s slam shatters it  
+- **The Phantom** — teleports; **Circle**’s dash deals bonus damage and stuns  
+- **The Hive** — minion economy + ring patterns; **Square** clears crowds, **Triangle** picks the core  
+
+**World & progression**
+
+- Procedural **floor graph** (backtracking walker + branch rooms + guaranteed shop)  
+- Room **obstacle sets** — hand-authored layouts + random fallback, doors stay passable  
+- **Shops**: **8** weapons with unique effects (vortex, barrier, chain lightning, clone, etc.)  
+- **Save / load** with **Continue** on the title screen; high-score fields persist across runs  
+
+**Audio & presentation**
+
+- **Procedural SFX** — sine sweeps and noise bursts into `sf::SoundBuffer`; **no WAV/MP3 assets**  
+- Screen shake, particles, slow-motion death / zoom, letterboxed **800×600** view for any window size  
+- Pause, tutorial overlay, fullscreen **F11**
+
+## Gameplay clip
+
+[![Watch on YouTube](https://img.shields.io/badge/Watch-Gameplay-red?style=for-the-badge&logo=youtube)](YOUR_YOUTUBE_LINK_HERE)
+
+| Form | Colour | Ability | Strong vs |
 | --- | --- | --- | --- |
-| **Circle** | Blue | Dash with i-frames | Chasers |
-| **Triangle** | Orange | Mouse-aimed shot | Shooters |
-| **Square** | Green | Ground-pound slam | Brutes |
+| **Circle** | Blue | Dash (i-frames) | Chasers |
+| **Triangle** | Orange | Mouse-aim shot | Shooters |
+| **Square** | Green | Ground-pound | Brutes |
 
----
+## Tech
 
-## Features
+- **C++17** · SFML **2.6** (graphics, window, audio) — **static** link (`SFML_STATIC`) + bundled `.lib` / `.dll`  
+- **Visual Studio 2022** · x64 **Debug** and **Release**  
+- Procedural **vector** rendering (`sf::CircleShape`, `sf::ConvexShape`, `sf::RectangleShape`) — no texture pipeline  
+- Plain-text **savegame** next to the executable · zlib-licensed SFML headers in `SFML/` (see `SFML/license.md`)
 
-- **3 procedural floors** of connected rooms, each larger than the last (5/6/7 grid)
-- **3 unique bosses**, each requiring a different form to defeat
-  - *The Guardian* — shielded; only Square's slam breaks the shield
-  - *The Phantom* — teleports; Circle's dash deals bonus damage and stuns
-  - *The Hive* — endless minions; Square's slam clears them
-- **8 weapons** sold in shops, each with a unique special move
-  (Flame Ring, Frost Shard, Thunder Strike, Shadow Dash, Barrier Shield, Vortex Pull, Mirror Clone, Chain Lightning)
-- **Form matchup system** — 1.5x damage on effective forms, 0.5x when resisted (floor 2+)
-- **Buff selection** — pick one of three random buffs after each boss; up to 3 stack
-- **Save / load** with a Continue option from the title menu
-- **Procedural sound effects** — sine waves and noise bursts synthesised at runtime, no audio files
-- **Procedural map generation** with backtracking walker, branch rooms and forced shop placement
-- **Procedural obstacle layouts** — eight hand-tuned patterns plus a random fallback
-- 5 enemy types with distinct AI (Chaser, Shooter, Brute, Dasher, Shielder)
-- Polish: screen shake, particle effects, slow-motion death with zoom, fullscreen with letterboxing, pause menu, in-game tutorial, high-score tracking, animated title screen
+Roughly **3.5k lines** across seven translation units + headers.
 
----
+## Project layout
 
-## Controls
-
-| Action | Key |
-| --- | --- |
-| Move | `WASD` / Arrow keys |
-| Switch form | Mouse scroll wheel |
-| Aim (Triangle form) | Mouse |
-| Use ability | `Space` |
-| Use equipped weapon | `E` |
-| Buy weapon in shop | `1` / `2` / `3` |
-| Pause / Resume | `Esc` |
-| Toggle fullscreen | `F11` |
-| Restart after Game Over | `R` |
-
----
+```text
+assignment/
+├── src/
+│   ├── main.cpp           Entry: window, events, F11 fullscreen
+│   ├── Game.{h,cpp}       Loop, maps, HUD, items, save/load, buffs, portals
+│   ├── Player.{h,cpp}     Movement, forms, abilities, multipliers
+│   ├── Enemy.{h,cpp}      Grunts + Guardian / Phantom / Hive
+│   ├── Room.{h,cpp}       Tiles, doors, shops, obstacle layouts
+│   ├── Projectile.h       Bullets + trails
+│   ├── Particle.h         Particles, floaty damage text, pickups
+│   ├── Item.h             Eight shop weapons & icon drawing
+│   ├── SaveData.h         Key=value persistence + highs
+│   └── Sound.h            Procedural buffers
+├── SFML/                  Headers, static libs, runtime DLLs (vendored)
+├── TransformGame.sln
+├── TransformGame.vcxproj
+├── readme.txt             Controls & features (assignment hand-in)
+├── LICENSE                MIT (game code; SFML stays under its own license)
+└── README.md              This file
+```
 
 ## Build
-
-Requires **Visual Studio 2022** (Community is fine) with the *Desktop development with C++* workload installed. SFML is bundled in the repo, so no extra downloads are needed.
 
 ```powershell
 git clone https://github.com/KevinRusev/assignment.git
@@ -68,54 +95,61 @@ cd assignment
 start TransformGame.sln
 ```
 
-In Visual Studio:
-1. Set the configuration to **Release | x64** (or Debug | x64).
-2. Hit **Build → Build Solution** (`Ctrl + Shift + B`), then **Debug → Start Without Debugging** (`Ctrl + F5`).
+1. Configuration **Release | x64** (or **Debug | x64**).  
+2. **Build → Build Solution** (`Ctrl + Shift + B`).  
+3. **Debug → Start Without Debugging** (`Ctrl + F5`).
 
-The build copies `openal32.dll` next to the executable automatically.
+The post-build step copies **openal32.dll** into the output folder.
 
----
+## Requirements
 
-## Project structure
+- **Windows 10 / 11**  
+- **Visual Studio 2022** with **Desktop development with C++**  
+- **No extra downloads** — SFML is in the repo
 
-```
-src/
-├── main.cpp        Window, event loop, fullscreen toggle
-├── Game.{h,cpp}    State machine, floor generation, HUD, item effects, save/load
-├── Player.{h,cpp}  Movement, transform logic, abilities, multipliers
-├── Enemy.{h,cpp}   Regular AI + 3 unique boss behaviours
-├── Room.{h,cpp}    Room types, doors, obstacle layouts, shop UI
-├── Projectile.h    Header-only struct with trail rendering
-├── Particle.h      Particles, damage numbers, health pickups
-├── Item.h          8 weapons with stat tables and vector icons
-├── SaveData.h      Plain-text save with high-score tracking
-└── Sound.h         Procedural audio generation (sine + noise)
+## Controls
 
-SFML/               Bundled SFML 2.6 (headers + static libs + DLLs)
-TransformGame.sln   Visual Studio 2022 solution
-```
-
-Roughly **3,500 lines of C++** across nine source files.
-
----
-
-## Tech notes
-
-- Statically linked SFML — defines `SFML_STATIC` and links `sfml-*-s[-d].lib` plus the OpenAL/FLAC/Vorbis/Ogg/Freetype dependencies that ship with SFML.
-- All artwork is generated with `sf::CircleShape`, `sf::ConvexShape` and `sf::RectangleShape` at runtime; the only external asset is the system Arial font (with a graceful fallback if it isn't found).
-- All sound effects are synthesised at startup into `sf::SoundBuffer` samples, so the game runs with zero audio files on disk.
-- Rendering uses a fixed 800×600 letterboxed `sf::View` so the game scales cleanly to any window or fullscreen resolution without distortion.
-
----
+| Action | Input |
+| --- | --- |
+| Move | `WASD` / arrows |
+| Transform | Mouse wheel |
+| Aim (Triangle) | Mouse |
+| Ability | `Space` |
+| Weapon special | `E` |
+| Shop buy | `1` / `2` / `3` |
+| Pause | `Esc` |
+| Fullscreen | `F11` |
+| Restart (game over) | `R` |
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+**Game source** — **MIT**. See [`LICENSE`](LICENSE).
 
-The project bundles SFML 2.6, which is released under the zlib/libpng license. See `SFML/license.md`.
+**SFML** ships under the **zlib/libpng** license — full text in [`SFML/license.md`](SFML/license.md).
 
 ---
 
-## Author
+### Kevin Rusev
 
-**Kevin Rusev** — [github.com/KevinRusev](https://github.com/KevinRusev)
+Computer programming student · **Bulgaria** · gameplay in **UE5 (C++)** and products on the web.
+
+**Languages**  
+![C++](https://img.shields.io/badge/-C%2B%2B-00599C?logo=cplusplus&logoColor=white&style=flat-square)
+![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white&style=flat-square)
+![JavaScript](https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black&style=flat-square)
+![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?logo=typescript&logoColor=white&style=flat-square)
+
+**Stack**  
+![Unreal Engine](https://img.shields.io/badge/-Unreal_Engine_5-313131?logo=unrealengine&style=flat-square)
+![SFML](https://img.shields.io/badge/-SFML-8CC445?logo=sfml&logoColor=white&style=flat-square)
+![React](https://img.shields.io/badge/-React-61DAFB?logo=react&logoColor=black&style=flat-square)
+
+**Links**  
+[![GitHub](https://img.shields.io/badge/GitHub-KevinRusev-181717?logo=github&style=flat-square)](https://github.com/KevinRusev)
+[![Profile README](https://img.shields.io/badge/Profile-README-181717?logo=github&style=flat-square)](https://github.com/KevinRusev/KevinRusev)
+[![Medieval combat (UE5)](https://img.shields.io/badge/Portfolio-Medieval_Combat-313131?logo=unrealengine&style=flat-square)](https://github.com/KevinRusev/MedivalCombatGame)
+[![Email](https://img.shields.io/badge/Email-kevinrusev1%40gmail.com-red?style=flat-square&logo=gmail)](mailto:kevinrusev1@gmail.com)
+
+**Also see** · [**Medieval Combat Game**](https://github.com/KevinRusev/MedivalCombatGame) — third-person Souls-style combat in Unreal Engine 5 (**C++ only** for combat, AI, and core systems).
+
+Thanks for reading — if you liked the **form-switching** loop here, you’ll find the same combat-reading habits in the UE5 repo above.
